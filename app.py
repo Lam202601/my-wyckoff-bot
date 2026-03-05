@@ -34,18 +34,27 @@ def get_index_data(period="1y"):
 
 def analyze_poe(df, index_df, ticker):
     df = df.copy()
+    index_df = index_df.copy()
+    
+    # 1. FIX LỖI TIMEZONE: Ép bỏ múi giờ để gộp dữ liệu không bị rỗng
+    df.index = pd.to_datetime(df.index).tz_localize(None)
+    index_df.index = pd.to_datetime(index_df.index).tz_localize(None)
+
     df['MA50'] = df['Close'].rolling(50).mean()
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
     
     # ---------------------------------------------------------
     # TÍNH TOÁN SỨC MẠNH TƯƠNG ĐỐI (RS) SO VỚI VN-INDEX
     # ---------------------------------------------------------
-    # Khớp ngày giao dịch giữa cổ phiếu và Index
     combined = pd.merge(df['Close'], index_df['Close'], left_index=True, right_index=True, suffixes=('_s', '_i'))
-    rs_line = combined['Close_s'] / combined['Close_i']
-    rs_ma20 = rs_line.rolling(20).mean() # Đường trung bình của RS
     
-    # Điều kiện tiên quyết: Cổ phiếu phải khỏe hơn Index (RS đang hướng lên)
+    # CHỐT CHẶN AN TOÀN: Nếu dữ liệu gộp bị lỗi hoặc không đủ 20 phiên, bỏ qua mã này
+    if len(combined) < 20: 
+        return None 
+        
+    rs_line = combined['Close_s'] / combined['Close_i']
+    rs_ma20 = rs_line.rolling(20).mean()
+    
     is_rs_strong = rs_line.iloc[-1] > rs_ma20.iloc[-1]
     # ---------------------------------------------------------
 
@@ -68,7 +77,7 @@ def analyze_poe(df, index_df, ticker):
     dieu_kien = ""
     cat_lo = ""
 
-    # Chỉ xét mua khi Sức mạnh tương đối (RS) ủng hộ, bỏ qua các mã đang yếu hơn thị trường
+    # Chỉ xét mua khi Sức mạnh tương đối (RS) ủng hộ
     if is_rs_strong:
         # 1. SWING TRADE (PHA A/B)
         if box_percent >= 0.10 and current_close <= bottom_zone and current_close >= tr_low:
@@ -113,39 +122,3 @@ def analyze_poe(df, index_df, ticker):
             "Cắt Lỗ (SL)": cat_lo
         }
     return None
-
-# --- GIAO DIỆN ---
-st.markdown("### Quét các tín hiệu Wyckoff mạnh hơn thị trường chung")
-if st.button("🦅 BẮT ĐẦU QUÉT"):
-    results = []
-    my_bar = st.progress(0, text="Đang tải dữ liệu VN-Index...")
-    
-    # Tải dữ liệu Index 1 lần để dùng chung
-    index_df = get_index_data("6mo")
-    
-    if index_df is not None:
-        total_tickers = sum(len(tickers) for tickers in SECTORS.values())
-        count = 0
-        
-        for sector, tickers in SECTORS.items():
-            for t in tickers:
-                df = get_data(t, "6mo")
-                if df is not None:
-                    res = analyze_poe(df, index_df, t)
-                    if res: results.append(res)
-                count += 1
-                my_bar.progress(count / total_tickers, text=f"Đang quét {t}...")
-                time.sleep(0.1)
-                
-        my_bar.empty()
-        if results:
-            st.success(f"Quét xong! Tìm thấy {len(results)} mã thỏa mãn tiêu chí.")
-            st.dataframe(pd.DataFrame(results))
-            st.balloons()
-        else:
-            st.info("Chưa có mã nào thỏa mãn tiêu chuẩn Sức mạnh tương đối và Wyckoff hôm nay.")
-    else:
-        st.error("Lỗi tải dữ liệu VN-Index. Vui lòng thử lại sau.")
-
-# Lưu ý: Phần code Tab 2 (Backtest) tạm thời mình rút gọn trong hiển thị này để bạn dễ copy phần lọc. 
-# Nếu bạn cần chèn vào code cũ có sẵn Tab 2 thì chỉ cần chép đè hàm `analyze_poe` và bổ sung `get_index_data` là được.
