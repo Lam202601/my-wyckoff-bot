@@ -42,66 +42,61 @@ def analyze_poe(df, ticker):
     current_close = df['close'].iloc[-1]
     current_vol = df['volume'].iloc[-1]
     
-    # Tìm mức Đỉnh/Đáy trong 60 phiên gần nhất (Trading Range)
+    # Kẻ Hộp Darvas / Trading Range trong 60 phiên gần nhất
     recent_60 = df.tail(60)
     tr_high = recent_60['high'].max()
     tr_low = recent_60['low'].min()
+    box_height = tr_high - tr_low
+    box_percent = box_height / tr_low # Tính tỷ lệ % biên độ của hộp
     
-    # LOGIC POE (PHA C, D, E)
+    # Định nghĩa ranh giới 25% sát đáy hộp
+    bottom_zone = tr_low + (box_height * 0.25) 
+    
     phase = None
     signal_strength = ""
+    action = ""
 
-    # 1. PHA E (Mark-up): Giá vượt Trading Range, MA50 > MA200, Volume vào mạnh
-    if current_close > tr_high and current_close > df['MA50'].iloc[-1] > df['MA200'].iloc[-1]:
+    # ==========================================
+    # 1. CHIẾN THUẬT SWING TRADE (PHA A / B)
+    # ==========================================
+    # Điều kiện: Biên độ hộp > 10%, giá đang nằm ở 25% biên dưới, và Volume cạn kiệt
+    if box_percent >= 0.10 and current_close <= bottom_zone and current_close >= tr_low:
+        if current_vol < df['Vol_MA20'].iloc[-1] * 0.7: # Cạn cung cực độ
+            phase = "Pha A/B (Swing Range)"
+            signal_strength = "📉 Giá chạm biên dưới SC/ST + Cạn cung"
+            action = f"Mua Swing - Chốt lời quanh {round(tr_high, 2)}"
+
+    # ==========================================
+    # 2. CHIẾN THUẬT THEO XU HƯỚNG (PHA C, D, E)
+    # ==========================================
+    # PHA E (Mark-up): Vượt đỉnh hộp với Vol lớn
+    elif current_close > tr_high and current_close > df['MA50'].iloc[-1]:
         if current_vol > df['Vol_MA20'].iloc[-1] * 1.5:
-            phase = "Pha E (Breakout/Mark-up)"
+            phase = "Pha E (Breakout đỉnh)"
             signal_strength = "🔥 Dòng tiền FOMO cực mạnh"
+            action = "Mua theo đà tăng"
 
-    # 2. PHA D (LPS/SOS): Đang tiến lên ranh giới trên của TR, đáy sau cao hơn đáy trước
+    # PHA D (SOS/LPS): Vượt MA50, nằm ở nửa trên của hộp, Vol vào
     elif current_close > df['MA50'].iloc[-1] and current_close < tr_high:
-        if current_vol > df['Vol_MA20'].iloc[-1] * 1.2: # Nến tăng Vol lớn (SOS)
-            phase = "Pha D (SOS/Tiến về kháng cự)"
-            signal_strength = "⚡ Dấu hiệu sức mạnh"
-        elif current_vol < df['Vol_MA20'].iloc[-1] * 0.7: # Nến chỉnh Vol nhỏ (LPS)
-            phase = "Pha D (LPS - Điểm hỗ trợ cuối)"
-            signal_strength = "🛡️ Chỉnh cạn cung, an toàn"
+        if current_vol > df['Vol_MA20'].iloc[-1] * 1.2:
+            phase = "Pha D (SOS - Dấu hiệu sức mạnh)"
+            signal_strength = "⚡ Dòng tiền lớn đẩy giá lên"
+            action = "Nắm giữ / Mua thêm"
 
-    # 3. PHA C (Spring/Test): Giá quét qua hỗ trợ hoặc test lại đáy với Vol thấp
-    elif current_close <= tr_low * 1.05 and current_close >= tr_low: # Quanh quẩn đáy hộp
-        if current_vol < df['Vol_MA20'].iloc[-1] * 0.6: # Cạn cung cực đại
-            phase = "Pha C (Test/Cạn cung)"
-            signal_strength = "🤫 Cá mập đè giá, hết áp lực bán"
+    # PHA C (Spring/Test): Giá quét thủng đáy hộp rồi rút chân
+    elif current_close < tr_low * 1.02: # Rơi xuống dưới đáy hoặc sát mép dưới
+        if df['close'].iloc[-1] > df['open'].iloc[-1] and current_vol > df['Vol_MA20'].iloc[-1]: 
+            # Rút chân (đóng cửa > mở cửa) với Vol khá -> Cú lừa Spring
+            phase = "Pha C (Spring/Cú rũ bỏ)"
+            signal_strength = "🚨 Quét Stop-loss rút chân"
+            action = "Mua rình rập"
 
     if phase:
         return {
             "Mã": ticker,
-            "Giá": current_close,
-            "Giai đoạn Wyckoff": phase,
-            "Động lượng (Volume)": signal_strength
+            "Giá": round(current_close, 2),
+            "Giai đoạn": phase,
+            "Tín hiệu": signal_strength,
+            "Hành động": action
         }
     return None
-
-if st.button("🦅 QUÉT TOP-DOWN TOÀN THỊ TRƯỜNG"):
-    st.write("Đang tải dữ liệu Real-time từ thị trường VN...")
-    results = []
-    
-    for sector, tickers in SECTORS.items():
-        st.markdown(f"### 🏭 Ngành: {sector}")
-        sector_results = []
-        
-        for t in tickers:
-            df = get_data(t)
-            if df is not None:
-                res = analyze_poe(df, t)
-                if res:
-                    sector_results.append(res)
-                    results.append(res)
-        
-        if sector_results:
-            st.table(pd.DataFrame(sector_results))
-        else:
-            st.info(f"Chưa có mã nào đạt POE tại ngành {sector} hôm nay.")
-            
-    if results:
-        st.success(f"Tất cả hoàn tất! Đã tóm được {len(results)} mã có điểm POE đẹp.")
-        st.balloons()
