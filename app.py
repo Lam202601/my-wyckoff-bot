@@ -26,11 +26,19 @@ def get_data(ticker, period="1y"):
         return None
 
 @st.cache_data(ttl=900)
+@st.cache_data(ttl=900)
 def get_index_data(period="1y"):
     try:
-        return yf.Ticker("^VNINDEX").history(period=period)
+        # Cách 1: Thử lấy VN-Index chuẩn
+        df = yf.Ticker("^VNINDEX").history(period=period)
+        if df is not None and len(df) > 20:
+            return df
+        
+        # Cách 2: Lỗi VN-Index -> Lấy ngay Quỹ ETF VN30 làm mỏ neo thay thế (Mượt 100%)
+        return yf.Ticker("E1VFVN30.VN").history(period=period)
     except:
-        return None
+        # Phòng hờ mọi trường hợp, vẫn trả về VN30 ETF
+        return yf.Ticker("E1VFVN30.VN").history(period=period)
 
 def analyze_poe(df, index_df, ticker):
     df = df.copy()
