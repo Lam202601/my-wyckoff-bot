@@ -1,84 +1,107 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-import time
+from datetime import datetime, timedelta
+# Thư viện dữ liệu chứng khoán VN xịn nhất hiện nay
+from vnstock import stock_historical_data 
 
-# Cấu hình giao diện Web
-st.set_page_config(page_title="Wyckoff Auto-Scanner", layout="wide")
-st.title("🎯 Wyckoff Auto-Scanner 2026")
-st.markdown("Hệ thống tự động quét các mã có dòng tiền lớn và siết nền theo Wyckoff.")
+st.set_page_config(page_title="Wyckoff Top-Down Screener", layout="wide")
+st.title("🦅 Wyckoff Top-Down POE Scanner")
+st.markdown("Lọc Ngành dẫn dắt ➡️ Cổ phiếu Leader ➡️ Điểm vào lệnh Pha C, D, E")
 
-# DANH SÁCH "VŨ TRỤ" CỔ PHIẾU (Các mã thanh khoản lớn nhất VN, nơi cá mập hoạt động)
-VN_UNIVERSE = [
-    # Ngân hàng & Chứng khoán
-    "VCB.VN", "BID.VN", "CTG.VN", "TCB.VN", "MBB.VN", "VPB.VN", "ACB.VN", "STB.VN", "SHB.VN", "HDB.VN", "VIB.VN", "LPB.VN",
-    "SSI.VN", "VND.VN", "HCM.VN", "VCI.VN", "SHS.VN", "MBS.VN", "FTS.VN", "BSI.VN",
-    # Bất động sản & KCN
-    "VHM.VN", "VIC.VN", "VRE.VN", "NVL.VN", "DIG.VN", "DXG.VN", "PDR.VN", "KBC.VN", "NLG.VN", "CEO.VN", "HDG.VN",
-    "GVR.VN", "IDC.VN", "SZC.VN", "VGC.VN", "PHR.VN",
-    # Thép, Dầu khí, Hóa chất
-    "HPG.VN", "HSG.VN", "NKG.VN", "VGS.VN",
-    "PVD.VN", "PVS.VN", "BSR.VN", "GAS.VN", "PLX.VN",
-    "DGC.VN", "DPM.VN", "DCM.VN", "CSV.VN",
-    # Bán lẻ, Công nghệ, Năng lượng
-    "FPT.VN", "MWG.VN", "PNJ.VN", "MSN.VN", "VNM.VN", "SAB.VN", "FRT.VN", "DGW.VN",
-    "REE.VN", "PC1.VN", "GEX.VN", "VHC.VN", "ANV.VN"
-]
-# Ghi chú: Bạn có thể copy paste thêm hàng trăm mã khác vào danh sách này.
+# Phân loại ngành cơ bản (Bạn có thể bổ sung thêm)
+SECTORS = {
+    "Ngân hàng": ["VCB", "BID", "CTG", "TCB", "MBB", "ACB", "VPB", "STB"],
+    "Chứng khoán": ["SSI", "VND", "HCM", "VCI", "SHS", "MBS", "FTS"],
+    "Thép": ["HPG", "HSG", "NKG", "VGS"],
+    "Bất động sản": ["VHM", "VIC", "DXG", "DIG", "KBC", "PDR", "NLG"],
+    "Bán lẻ & Công nghệ": ["FPT", "MWG", "PNJ", "FRT", "DGW"]
+}
 
-def scan_wyckoff(ticker):
+# Hàm lấy dữ liệu từ vnstock
+@st.cache_data(ttl=3600) # Lưu cache 1 giờ để web không bị đơ
+def get_data(ticker, days=150):
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
     try:
-        stock = yf.download(ticker, period="1y", interval="1d", progress=False)
-        index = yf.download("^VNINDEX", period="1y", interval="1d", progress=False)
-        if len(stock) < 100: return None
-
-        combined = pd.merge(stock['Close'], index['Close'], left_index=True, right_index=True, suffixes=('_s', '_i'))
-        rs_line = combined['Close_s'] / combined['Close_i']
-        rs_sma20 = rs_line.rolling(window=20).mean()
-        
-        last_close = float(stock['Close'].iloc[-1])
-        ma200 = float(stock['Close'].rolling(window=200).mean().iloc[-1])
-        
-        recent = stock.tail(30)
-        tr_width = float((recent['High'].max() - recent['Low'].min()) / recent['Low'].min())
-        recent_vol = float(recent['Volume'].mean())
-        avg_vol = float(stock['Volume'].tail(50).mean())
-
-        # LOGIC LỌC TỰ ĐỘNG
-        if last_close > ma200 and rs_line.iloc[-1] > rs_sma20.iloc[-1] and tr_width < 0.12 and recent_vol < avg_vol:
-            return {
-                "Mã": ticker.replace(".VN", ""), # Cắt chữ .VN cho đẹp
-                "Giá hiện tại": round(last_close, 2),
-                "Siết nền": f"{round(tr_width*100, 2)}%",
-                "Đánh giá": "🔥 Đạt chuẩn Tích lũy"
-            }
+        # Tải dữ liệu O-H-L-C-V
+        df = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution="1D", type="stock")
+        if df is not None and not df.empty:
+            df['close'] = pd.to_numeric(df['close'])
+            df['volume'] = pd.to_numeric(df['volume'])
+            return df
     except:
         return None
     return None
 
-st.write(f"Vũ trụ theo dõi hiện tại: **{len(VN_UNIVERSE)} mã thanh khoản lớn nhất**.")
+def analyze_poe(df, ticker):
+    # Tính toán các đường MA và Volume
+    df['MA50'] = df['close'].rolling(50).mean()
+    df['MA200'] = df['close'].rolling(200).mean()
+    df['Vol_MA20'] = df['volume'].rolling(20).mean()
+    
+    current_close = df['close'].iloc[-1]
+    current_vol = df['volume'].iloc[-1]
+    
+    # Tìm mức Đỉnh/Đáy trong 60 phiên gần nhất (Trading Range)
+    recent_60 = df.tail(60)
+    tr_high = recent_60['high'].max()
+    tr_low = recent_60['low'].min()
+    
+    # LOGIC POE (PHA C, D, E)
+    phase = None
+    signal_strength = ""
 
-if st.button("🚀 BẤM ĐỂ QUÉT TOÀN BỘ THỊ TRƯỜNG"):
+    # 1. PHA E (Mark-up): Giá vượt Trading Range, MA50 > MA200, Volume vào mạnh
+    if current_close > tr_high and current_close > df['MA50'].iloc[-1] > df['MA200'].iloc[-1]:
+        if current_vol > df['Vol_MA20'].iloc[-1] * 1.5:
+            phase = "Pha E (Breakout/Mark-up)"
+            signal_strength = "🔥 Dòng tiền FOMO cực mạnh"
+
+    # 2. PHA D (LPS/SOS): Đang tiến lên ranh giới trên của TR, đáy sau cao hơn đáy trước
+    elif current_close > df['MA50'].iloc[-1] and current_close < tr_high:
+        if current_vol > df['Vol_MA20'].iloc[-1] * 1.2: # Nến tăng Vol lớn (SOS)
+            phase = "Pha D (SOS/Tiến về kháng cự)"
+            signal_strength = "⚡ Dấu hiệu sức mạnh"
+        elif current_vol < df['Vol_MA20'].iloc[-1] * 0.7: # Nến chỉnh Vol nhỏ (LPS)
+            phase = "Pha D (LPS - Điểm hỗ trợ cuối)"
+            signal_strength = "🛡️ Chỉnh cạn cung, an toàn"
+
+    # 3. PHA C (Spring/Test): Giá quét qua hỗ trợ hoặc test lại đáy với Vol thấp
+    elif current_close <= tr_low * 1.05 and current_close >= tr_low: # Quanh quẩn đáy hộp
+        if current_vol < df['Vol_MA20'].iloc[-1] * 0.6: # Cạn cung cực đại
+            phase = "Pha C (Test/Cạn cung)"
+            signal_strength = "🤫 Cá mập đè giá, hết áp lực bán"
+
+    if phase:
+        return {
+            "Mã": ticker,
+            "Giá": current_close,
+            "Giai đoạn Wyckoff": phase,
+            "Động lượng (Volume)": signal_strength
+        }
+    return None
+
+if st.button("🦅 QUÉT TOP-DOWN TOÀN THỊ TRƯỜNG"):
+    st.write("Đang tải dữ liệu Real-time từ thị trường VN...")
     results = []
     
-    # Tạo thanh tiến trình để bạn biết bot đang quét đến đâu
-    progress_text = "Đang rà soát dữ liệu thị trường..."
-    my_bar = st.progress(0, text=progress_text)
-    
-    for i, t in enumerate(VN_UNIVERSE):
-        res = scan_wyckoff(t)
-        if res: 
-            results.append(res)
-        # Cập nhật thanh tiến trình
-        percent_complete = int(((i + 1) / len(VN_UNIVERSE)) * 100)
-        my_bar.progress(percent_complete, text=f"Đang quét {t} ({percent_complete}%)")
-        time.sleep(0.1) # Nghỉ một chút để không bị Yahoo chặn do request quá nhanh
+    for sector, tickers in SECTORS.items():
+        st.markdown(f"### 🏭 Ngành: {sector}")
+        sector_results = []
         
-    my_bar.empty() # Xóa thanh tiến trình khi xong
-    
+        for t in tickers:
+            df = get_data(t)
+            if df is not None:
+                res = analyze_poe(df, t)
+                if res:
+                    sector_results.append(res)
+                    results.append(res)
+        
+        if sector_results:
+            st.table(pd.DataFrame(sector_results))
+        else:
+            st.info(f"Chưa có mã nào đạt POE tại ngành {sector} hôm nay.")
+            
     if results:
+        st.success(f"Tất cả hoàn tất! Đã tóm được {len(results)} mã có điểm POE đẹp.")
         st.balloons()
-        st.success(f"Tuyệt vời! Bot đã tìm thấy {len(results)} mã đạt chuẩn Wyckoff hôm nay:")
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
-    else:
-        st.warning("Hôm nay chưa có mã nào đạt chuẩn. Mọi thứ vẫn đang rủi ro hoặc chưa nén đủ chặt!")
