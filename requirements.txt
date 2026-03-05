@@ -1,4 +1,3 @@
 streamlit
 pandas
-vnstock
-plotly
+yfinance
