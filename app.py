@@ -4,15 +4,22 @@ import pandas as pd
 import time
 
 st.set_page_config(page_title="Wyckoff Master: The Unified GGU", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bản Tổng Hợp Toàn Diện")
+st.title("🏛️ Hệ Thống GGU: Radar Toàn Thị Trường")
 st.markdown("Tích hợp trọn vẹn: Đa Cấu Trúc (SC/BC), Sóng CHoB/CHoC, VSA Cung Cầu & Top-Down Leadership")
 
+# DANH SÁCH MỞ RỘNG - GẦN 100 MÃ THANH KHOẢN CAO NHẤT THỊ TRƯỜNG
 SECTORS = {
-    "Ngân hàng": ["VCB.VN", "BID.VN", "CTG.VN", "TCB.VN", "MBB.VN", "STB.VN", "VPB.VN", "ACB.VN"],
-    "Chứng khoán": ["SSI.VN", "VND.VN", "HCM.VN", "VCI.VN", "SHS.VN", "MBS.VN", "FTS.VN"],
-    "Thép": ["HPG.VN", "HSG.VN", "NKG.VN", "VGS.VN"],
-    "Bất động sản": ["VHM.VN", "VIC.VN", "DXG.VN", "DIG.VN", "KBC.VN", "PDR.VN", "NLG.VN"],
-    "Bán lẻ & Công nghệ": ["FPT.VN", "MWG.VN", "PNJ.VN", "FRT.VN", "DGW.VN"]
+    "Ngân hàng": ["VCB.VN", "BID.VN", "CTG.VN", "TCB.VN", "MBB.VN", "STB.VN", "VPB.VN", "ACB.VN", "HDB.VN", "VIB.VN", "TPB.VN", "SHB.VN", "MSB.VN", "LPB.VN", "EIB.VN"],
+    "Chứng khoán": ["SSI.VN", "VND.VN", "HCM.VN", "VCI.VN", "SHS.VN", "MBS.VN", "FTS.VN", "BSI.VN", "CTS.VN", "AGR.VN", "VIX.VN"],
+    "Thép": ["HPG.VN", "HSG.VN", "NKG.VN", "VGS.VN", "SMC.VN", "TLH.VN"],
+    "Bất động sản": ["VHM.VN", "VIC.VN", "DXG.VN", "DIG.VN", "KBC.VN", "PDR.VN", "NLG.VN", "NVL.VN", "CEO.VN", "HDC.VN", "KDH.VN", "SZC.VN", "IDC.VN"],
+    "Bán lẻ & Công nghệ": ["FPT.VN", "MWG.VN", "PNJ.VN", "FRT.VN", "DGW.VN", "PET.VN"],
+    "Dầu khí": ["GAS.VN", "PVD.VN", "PVS.VN", "BSR.VN", "PLX.VN"],
+    "Cảng & Vận tải biển": ["GMD.VN", "HAH.VN", "VSC.VN", "PVT.VN"],
+    "Năng lượng & Điện": ["POW.VN", "REE.VN", "PC1.VN", "NT2.VN", "GEG.VN"],
+    "Hóa chất & Phân bón": ["DGC.VN", "DCM.VN", "DPM.VN", "CSV.VN"],
+    "Thủy sản & Nông nghiệp": ["VHC.VN", "ANV.VN", "IDI.VN", "DBC.VN", "HAG.VN", "PAN.VN", "TAR.VN"],
+    "Xây dựng & Đầu tư công": ["VCG.VN", "HHV.VN", "LCG.VN", "C4G.VN", "HBC.VN", "CTD.VN"]
 }
 
 @st.cache_data(ttl=900)
@@ -45,23 +52,16 @@ def analyze_unified_wyckoff(df, index_df, ticker):
     df['MA50'] = df['Close'].rolling(50).mean()
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
-    # =======================================================
-    # BƯỚC 1: ĐO LƯỜNG TOP-DOWN VÀ ĐỘNG LƯỢNG (Giữ lại tính toán, chưa lọc)
-    # =======================================================
+    # BƯỚC 1: ĐO LƯỜNG TOP-DOWN VÀ ĐỘNG LƯỢNG
     stock_roc63 = (combined['Close_s'].iloc[-1] - combined['Close_s'].iloc[-63]) / combined['Close_s'].iloc[-63] * 100
     idx_roc63 = (combined['Close_i'].iloc[-1] - combined['Close_i'].iloc[-63]) / combined['Close_i'].iloc[-63] * 100
     
     rs_line = combined['Close_s'] / combined['Close_i']
     is_rs_uptrend = rs_line.iloc[-1] > rs_line.rolling(50).mean().iloc[-1]
-    
-    # Leader = RS đang Uptrend và Động lượng 1 Quý thắng VNI
     is_leader = (stock_roc63 > idx_roc63) and is_rs_uptrend
 
-    # =======================================================
     # BƯỚC 2: ĐỊNH VỊ CLIMAX (Tích Luỹ & Tái Tích Luỹ)
-    # =======================================================
     lookback = df.tail(200)
-    # TÌM CLIMAX TRONG QUÁ KHỨ: Bỏ qua 40 phiên gần nhất để TR có thời gian hình thành (Fix lỗi Backtest mù)
     base_window = lookback.iloc[:-40] 
     if base_window.empty: return None
     
@@ -72,31 +72,26 @@ def analyze_unified_wyckoff(df, index_df, ticker):
     c_vol = float(df.loc[climax_date]['Volume'])
     c_ma50 = float(df.loc[climax_date]['MA50'])
 
-    is_sc = c_close < c_ma50 # Bị đạp thủng MA50 nổ Vol -> SC
-    is_bc = c_close >= c_ma50 # Rướn vượt MA50 nổ Vol -> BC
+    is_sc = c_close < c_ma50 
+    is_bc = c_close >= c_ma50 
 
     tr_high = 0
     tr_low = 0
     c_type = ""
 
-    # =======================================================
     # BƯỚC 3: ĐỘNG LỰC HỌC SÓNG (CHoB / CHoC)
-    # =======================================================
     after_climax = df.loc[climax_date:]
     
     if is_sc:
         c_type = "Tích Luỹ Đáy (SC)"
-        # AR: Sóng hồi đầu tiên
         ar_date = after_climax.head(30)['High'].idxmax()
         ar_high = float(after_climax.loc[ar_date]['High'])
         
-        # ST: Sóng test lại SC
         after_ar = df.loc[ar_date:].head(25)
         if after_ar.empty: return None
         st_date = after_ar['Low'].idxmin()
         st_vol = float(df.loc[st_date]['Volume'])
         
-        # CHoC: Cú test ST phải có Volume thấp hơn SC (Sự cạn cung)
         if st_vol >= c_vol: return None 
         
         tr_low = c_low
@@ -104,17 +99,14 @@ def analyze_unified_wyckoff(df, index_df, ticker):
 
     elif is_bc:
         c_type = "Tái Tích Luỹ (BC)"
-        # AR: Sóng điều chỉnh tự động
         ar_date = after_climax.head(30)['Low'].idxmin()
         ar_low = float(after_climax.loc[ar_date]['Low'])
         
-        # ST: Sóng test lại đỉnh BC
         after_ar = df.loc[ar_date:].head(25)
         if after_ar.empty: return None
         st_date = after_ar['High'].idxmax()
         st_vol = float(df.loc[st_date]['Volume'])
         
-        # CHoC: Kéo lên đỉnh test nhưng Vol thấp hơn BC (Sự cạn cầu hưng phấn)
         if st_vol >= c_vol: return None
         
         tr_high = c_high
@@ -122,9 +114,7 @@ def analyze_unified_wyckoff(df, index_df, ticker):
 
     if tr_low == 0 or tr_low >= tr_high or (tr_high - tr_low) / tr_low < 0.05: return None
 
-    # =======================================================
     # BƯỚC 4: VSA - LỌC BẪY PHÂN PHỐI
-    # =======================================================
     since_climax = df.loc[climax_date:]
     up_days = since_climax[since_climax['Close'] > since_climax['Open']]
     down_days = since_climax[since_climax['Close'] < since_climax['Open']]
@@ -132,11 +122,9 @@ def analyze_unified_wyckoff(df, index_df, ticker):
     avg_up_vol = up_days['Volume'].mean() if not up_days.empty else 0
     avg_down_vol = down_days['Volume'].mean() if not down_days.empty else 0
     
-    if avg_down_vol > avg_up_vol: return None # Xả > Gom -> Loại bỏ
+    if avg_down_vol > avg_up_vol: return None 
 
-    # =======================================================
-    # BƯỚC 5: ĐỊNH VỊ PHA (POE) BẰNG BỐI CẢNH
-    # =======================================================
+    # BƯỚC 5: ĐỊNH VỊ PHA (POE)
     current_close = float(df['Close'].iloc[-1])
     current_vol = float(df['Volume'].iloc[-1])
     current_open = float(df['Open'].iloc[-1])
@@ -146,14 +134,12 @@ def analyze_unified_wyckoff(df, index_df, ticker):
     vung_mua_poe = ""
     cat_lo = ""
     
-    # Pha C (Rũ bỏ cạn cung - Spring/Test)
     if current_close <= tr_low * 1.05 and current_close >= tr_low * 0.95:
         if current_close > current_open and current_vol < float(df['Vol_MA20'].iloc[-1]) * 0.8:
             phase = "Pha C (Spring/Test)"
             vung_mua_poe = f"Mua rũ bỏ tại {round(current_close, 2)}"
             cat_lo = f"Thủng {round(current_close * 0.95, 2)}"
             
-    # Pha D (Dòng tiền kích hoạt - Cần Top-Down Leader để mua an toàn)
     elif current_close > float(df['MA50'].iloc[-1]) and current_close < tr_high * 0.98:
         if current_vol > float(df['Vol_MA20'].iloc[-1]) * 1.2 and current_close > current_open:
             if is_leader:
@@ -161,7 +147,6 @@ def analyze_unified_wyckoff(df, index_df, ticker):
                 vung_mua_poe = f"Chờ LPS về {round(float(df['MA50'].iloc[-1]), 2)}"
                 cat_lo = f"Thủng MA50 ({round(float(df['MA50'].iloc[-1]) * 0.97, 2)})"
             
-    # Pha E (Breakout - Bắt buộc phải là Leader)
     elif current_close > tr_high and current_close > float(df['MA50'].iloc[-1]):
         if current_vol > float(df['Vol_MA20'].iloc[-1]) * 1.5:
             if is_leader:
@@ -169,7 +154,6 @@ def analyze_unified_wyckoff(df, index_df, ticker):
                 vung_mua_poe = f"Chờ BUEC test {round(tr_high, 2)}"
                 cat_lo = f"Thủng {round(tr_high * 0.96, 2)}"
 
-    # Pha A/B (Đi ngang kiểm định)
     elif current_close <= bottom_zone and current_close >= tr_low:
         if current_vol < float(df['Vol_MA20'].iloc[-1]) * 0.75:
             phase = "Pha A/B (Kiểm định biên)"
@@ -181,7 +165,7 @@ def analyze_unified_wyckoff(df, index_df, ticker):
             "Mã": ticker.replace(".VN", ""), 
             "Mẫu Hình": c_type,
             "Ngày Bắt Đầu TR": climax_date.strftime("%d/%m/%Y"),
-            "CHoB/CHoC": "✅ Sóng đạt chuẩn",
+            "CHoB/CHoC": "✅ Đạt chuẩn",
             "Top-Down": "⭐ Leader" if is_leader else "Đang gom",
             "Khung TR": f"{round(tr_low, 2)} - {round(tr_high, 2)}",
             "Giá HT": round(current_close, 2), 
@@ -194,14 +178,13 @@ def analyze_unified_wyckoff(df, index_df, ticker):
 # ==========================================
 # GIAO DIỆN WEB (TABS)
 # ==========================================
-tab1, tab2 = st.tabs(["🎯 Lọc Siêu Tổng Hợp (GGU Master)", "🧪 Backtest Chiến Dịch"])
+tab1, tab2 = st.tabs(["🎯 Quét Gần 100 Mã Thanh Khoản", "🧪 Backtest Chiến Dịch"])
 
-# --- TAB 1: RADAR SĂN MÃ ---
 with tab1:
-    st.markdown("### 🦅 Quét Tín Hiệu: SC/BC, Động Lực Sóng & Top-Down")
+    st.markdown("### 🦅 Quét Tín Hiệu: Nhận Diện Tích Luỹ & Dòng Tiền Lớn")
     if st.button("🚀 KÍCH HOẠT RADAR"):
         results = []
-        my_bar = st.progress(0, text="Khởi tạo thuật toán phân tích đa chiều...")
+        my_bar = st.progress(0, text="Khởi tạo Radar diện rộng...")
         index_df = get_index_data("2y")
         
         if index_df is not None:
@@ -216,25 +199,24 @@ with tab1:
                             res["Ngành"] = sector
                             results.append(res)
                     count += 1
-                    my_bar.progress(count / total_tickers, text=f"Đang phân tích cấu trúc & giá trị nội tại: {t}...")
+                    my_bar.progress(count / total_tickers, text=f"Đang phân tích: {t}...")
                     time.sleep(0.05)
             
             my_bar.empty()
             if results:
-                st.success(f"Radar hoàn tất! Có {len(results)} mã thỏa mãn mọi điều kiện khắt khe của Wyckoff.")
+                st.success(f"Radar hoàn tất! Tìm thấy {len(results)} mã thỏa mãn điều kiện Wyckoff.")
                 df_res = pd.DataFrame(results)[["Ngành", "Mã", "Mẫu Hình", "Ngày Bắt Đầu TR", "Khung TR", "Giá HT", "Top-Down", "Giai đoạn", "POE", "SL"]]
                 st.dataframe(df_res, use_container_width=True)
             else:
-                st.warning("Thị trường hiện tại không có thiết lập nào đạt chuẩn Tích Luỹ / Tái Tích Luỹ GGU.")
+                st.warning("Thị trường hiện tại không có thiết lập nào đạt chuẩn GGU.")
         else:
             st.error("Lỗi kết nối dữ liệu VN-Index.")
 
-# --- TAB 2: BACKTEST CHIẾN DỊCH ---
 with tab2:
-    st.markdown("### 🧪 Mô phỏng Chiến dịch (Sửa lỗi Định vị TR)")
+    st.markdown("### 🧪 Mô phỏng Chiến dịch (Gần 100 Mã)")
     col1, col2 = st.columns([1, 2])
     with col1:
-        test_ticker = st.selectbox("Chọn mã muốn Backtest (2 năm qua):", 
+        test_ticker = st.selectbox("Chọn mã muốn Backtest:", 
                                   [t for tickers in SECTORS.values() for t in tickers])
     with col2:
         st.write("")
@@ -256,7 +238,6 @@ with tab2:
             trade_type = ""
             entry_date = ""
 
-            # Bắt đầu quét từ ngày 201 để đảm bảo window có đủ 200 ngày dữ liệu lịch sử
             for i in range(200, len(df_bt)):
                 current_date = df_bt.index[i]
                 current_close = float(df_bt['Close'].iloc[i])
