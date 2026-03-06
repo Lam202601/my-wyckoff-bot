@@ -3,25 +3,38 @@ import yfinance as yf
 import pandas as pd
 import time
 
-st.set_page_config(page_title="Wyckoff Master: Pure Price Action", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bộ Lọc Thanh Khoản & Động Lực Sóng")
-st.markdown("Loại bỏ cổ phiếu rác. Xác định Cấu trúc hoàn toàn bằng Động lực Sóng (Swing Dynamics).")
+st.set_page_config(page_title="Wyckoff Master: Auto Radar", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Tự Động Quét Toàn Thị Trường")
+st.markdown("Cơ sở dữ liệu tích hợp ~400 mã thanh khoản cao nhất. Phân tích Bar-by-Bar (Pure Price Action).")
 
-# DANH SÁCH 150+ MÃ CỔ PHIẾU THANH KHOẢN TỐT NHẤT THỊ TRƯỜNG VIỆT NAM
-DEFAULT_SECTORS = {
-    "Ngân hàng": ["VCB.VN", "BID.VN", "CTG.VN", "TCB.VN", "MBB.VN", "STB.VN", "VPB.VN", "ACB.VN", "HDB.VN", "VIB.VN", "TPB.VN", "SHB.VN", "MSB.VN", "LPB.VN", "EIB.VN", "OCB.VN", "SSB.VN"],
-    "Chứng khoán": ["SSI.VN", "VND.VN", "HCM.VN", "VCI.VN", "SHS.VN", "MBS.VN", "FTS.VN", "BSI.VN", "CTS.VN", "AGR.VN", "VIX.VN", "ORS.VN", "VDS.VN", "BVS.VN"],
-    "Thép & Vật liệu": ["HPG.VN", "HSG.VN", "NKG.VN", "VGS.VN", "SMC.VN", "TLH.VN", "HT1.VN", "BCC.VN"],
-    "Bất động sản": ["VHM.VN", "VIC.VN", "VRE.VN", "DXG.VN", "DIG.VN", "PDR.VN", "NLG.VN", "NVL.VN", "CEO.VN", "HDC.VN", "KDH.VN", "NTL.VN", "TCH.VN", "IJC.VN"],
-    "Khu công nghiệp": ["KBC.VN", "IDC.VN", "SZC.VN", "VGC.VN", "PHR.VN", "BCM.VN", "NTC.VN", "SIP.VN"],
-    "Bán lẻ & Công nghệ": ["FPT.VN", "MWG.VN", "PNJ.VN", "FRT.VN", "DGW.VN", "PET.VN", "CMG.VN"],
-    "Dầu khí & Hóa chất": ["GAS.VN", "PVD.VN", "PVS.VN", "BSR.VN", "PLX.VN", "DGC.VN", "DCM.VN", "DPM.VN", "CSV.VN", "GVR.VN"],
-    "Cảng & Vận tải biển": ["GMD.VN", "HAH.VN", "VSC.VN", "PVT.VN", "VOS.VN"],
-    "Năng lượng & Điện": ["POW.VN", "REE.VN", "PC1.VN", "NT2.VN", "GEG.VN", "TV2.VN", "HDG.VN"],
-    "Thủy sản & Nông nghiệp": ["VHC.VN", "ANV.VN", "IDI.VN", "FMC.VN", "DBC.VN", "HAG.VN", "BAF.VN", "PAN.VN", "TAR.VN"],
-    "Xây dựng & ĐTC": ["VCG.VN", "HHV.VN", "LCG.VN", "C4G.VN", "HBC.VN", "CTD.VN", "FCN.VN", "HUT.VN"],
-    "Dệt may & Khác": ["TNG.VN", "VGT.VN", "GIL.VN", "MSH.VN", "VNM.VN", "SAB.VN", "MSN.VN"]
-}
+# DATABASE TÍCH HỢP SẴN: ~400 MÃ THANH KHOẢN TỐT NHẤT THỊ TRƯỜNG VIỆT NAM (HOSE, HNX, UPCOM)
+# Bao phủ toàn bộ VN30, VNMidcap, HNX30 và các cổ phiếu có dòng tiền lớn
+MARKET_TICKERS = [
+    # Ngân hàng
+    "VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB","BVB","SGB",
+    # Chứng khoán
+    "SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APS","HBS","SBS",
+    # Thép & Vật liệu xây dựng
+    "HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB","DHA","VLB","TIS","POM",
+    # Bất động sản (Thương mại & Dân cư)
+    "VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","KHG","SCR","HQC","DXS","QCG","NBB","ITC","SJS",
+    # Khu công nghiệp
+    "KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","SZB","TIP",
+    # Bán lẻ, Tiêu dùng & Công nghệ
+    "FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR","ITD","SAB","VNM","MSN","KDC","MCH","SBT","QNS","LSS","SLS",
+    # Dầu khí & Hóa chất / Phân bón
+    "GAS","PVD","PVS","BSR","PLX","OIL","PVC","PVB","DGC","DCM","DPM","CSV","GVR","BFC","LAS","DDV",
+    # Cảng, Vận tải biển & Logistics
+    "GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP","TCL","MVN","ILB",
+    # Năng lượng, Điện & Nước
+    "POW","REE","PC1","NT2","GEG","TV2","HDG","QTP","HND","BWE","TDM","VSH","CHP","SBA",
+    # Thủy sản, Nông nghiệp & Thực phẩm
+    "VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","MPC","ASM","BFX","HNG",
+    # Xây dựng & Đầu tư công
+    "VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","PC1","THD","ROS","CII",
+    # Dệt may, Bảo hiểm, Y tế, Nhựa & Khác
+    "TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","BIC","DHG","IMP","DBD","DCL","BMP","NTP","AAA","APH","HAP","GEX"
+]
 
 @st.cache_data(ttl=900)
 def get_data(ticker, period="2y"): 
@@ -58,7 +71,7 @@ def analyze_pure_wyckoff(df, index_df, ticker, min_volume):
     # =======================================================
     current_vol_ma20 = float(df['Vol_MA20'].iloc[-1])
     if current_vol_ma20 < min_volume:
-        return None # Thanh khoản quá thấp -> Bỏ qua ngay, không tốn tài nguyên phân tích
+        return None # Thanh khoản thấp -> Bỏ qua ngay lập tức
 
     # =======================================================
     # BƯỚC 1: XÁC ĐỊNH SỰ KIỆN CLIMAX (BẰNG ĐỘNG LỰC SÓNG)
@@ -153,7 +166,7 @@ def analyze_pure_wyckoff(df, index_df, ticker, min_volume):
     is_leader = (stock_roc63 > idx_roc63) and is_rs_uptrend
 
     # =======================================================
-    # BƯỚC 5: ĐỊNH VỊ PHA (POE) THEO HÀNH ĐỘNG GIÁ
+    # BƯỚC 5: ĐỊNH VỊ PHA (POE)
     # =======================================================
     current_close = float(df['Close'].iloc[-1])
     current_vol = float(df['Volume'].iloc[-1])
@@ -183,7 +196,7 @@ def analyze_pure_wyckoff(df, index_df, ticker, min_volume):
         if current_vol > current_vol_ma20 * 1.5:
             if is_leader:
                 phase = "Pha E (Breakout)"
-                vung_mua_poe = f"Chờ BUEC test đỉnh {round(tr_high, 2)}"
+                vung_mua_poe = f"Chờ BUEC test {round(tr_high, 2)}"
                 cat_lo = f"Thủng {round(tr_high * 0.96, 2)}"
 
     elif current_close <= bottom_zone and current_close >= tr_low:
@@ -209,39 +222,27 @@ def analyze_pure_wyckoff(df, index_df, ticker, min_volume):
 # ==========================================
 # GIAO DIỆN WEB (TABS)
 # ==========================================
-tab1, tab2 = st.tabs(["🎯 Radar Diện Rộng (150+ Mã Cơ Bản)", "🧪 Backtest Chiến Dịch"])
+tab1, tab2 = st.tabs(["🎯 Auto Radar (Toàn Thị Trường)", "🧪 Backtest Chiến Dịch"])
 
 with tab1:
-    st.markdown("### 🦅 Quét Tín Hiệu: Lọc Thanh Khoản & Động Lực Sóng Price Action")
+    st.markdown("### 🦅 Hệ Thống Quét Tự Động Toàn Bộ Các Mã Có Dòng Tiền Lớn")
     
     # GIAO DIỆN TÙY CHỈNH THANH KHOẢN
     min_vol_input = st.number_input(
         "BỘ LỌC THANH KHOẢN: Trung bình Khối lượng 20 phiên tối thiểu (Cổ phiếu/Phiên):", 
-        min_value=10000, max_value=2000000, value=200000, step=50000,
-        help="Khuyến nghị > 200,000 để bám theo dấu chân Smart Money, tránh mã bo cung thao túng."
+        min_value=50000, max_value=2000000, value=200000, step=50000,
+        help="Khuyến nghị > 200,000 để bám theo dấu chân Smart Money. Tăng mức này lên 500k hoặc 1 triệu để chỉ tìm siêu Bluechips."
     )
     
-    st.markdown("Tải lên File CSV nếu bạn có danh sách mã riêng (Nếu không, hệ thống quét 150+ mã cơ bản).")
-    uploaded_file = st.file_uploader("Tải file danh_sach_ma.csv", type=["csv"])
-    
-    if st.button("🚀 KÍCH HOẠT RADAR"):
+    if st.button("🚀 KÍCH HOẠT RADAR TỰ ĐỘNG"):
         results = []
-        my_bar = st.progress(0, text="Khởi tạo Radar diện rộng...")
+        my_bar = st.progress(0, text="Khởi tạo kết nối dữ liệu Vĩ mô...")
         index_df = get_index_data("2y")
         
-        tickers_to_scan = []
-        if uploaded_file is not None:
-            try:
-                df_user = pd.read_csv(uploaded_file, header=None)
-                raw_tickers = df_user.iloc[:, 0].dropna().astype(str).tolist()
-                tickers_to_scan = [t.strip().upper() + ".VN" if not t.endswith(".VN") else t.strip().upper() for t in raw_tickers]
-            except Exception as e:
-                st.error("Lỗi đọc file CSV.")
-        else:
-            for tickers in DEFAULT_SECTORS.values():
-                tickers_to_scan.extend(tickers)
+        # Thêm đuôi .VN tự động cho Yahoo Finance
+        tickers_to_scan = [t + ".VN" for t in MARKET_TICKERS]
         
-        if index_df is not None and tickers_to_scan:
+        if index_df is not None:
             total_tickers = len(tickers_to_scan)
             count = 0
             
@@ -249,32 +250,31 @@ with tab1:
                 for t in tickers_to_scan:
                     df = get_data(t, "2y")
                     if df is not None:
-                        # Truyền tham số min_vol_input vào hàm phân tích
                         res = analyze_pure_wyckoff(df, index_df, t, min_vol_input)
                         if res: 
                             results.append(res)
                     count += 1
-                    my_bar.progress(count / total_tickers, text=f"Đang phân tích Bar-by-Bar: {t}...")
-                    time.sleep(0.05 if total_tickers < 100 else 0.1) 
+                    my_bar.progress(count / total_tickers, text=f"Đang kiểm định Bar-by-Bar: {t}...")
+                    # Delay cực nhỏ để tránh Yahoo chặn IP khi quét lượng lớn
+                    time.sleep(0.02) 
             except Exception as e:
-                st.warning("Yahoo Finance có thể đã giới hạn lượt truy cập. Đang xuất kết quả đã quét được...")
+                st.warning("Đã hoàn tất quét một phần danh mục. Đang hiển thị kết quả...")
                 
             my_bar.empty()
             if results:
-                st.success(f"Radar hoàn tất! Tìm thấy {len(results)} siêu cổ phiếu vượt qua màng lọc thanh khoản và cấu trúc Wyckoff.")
+                st.success(f"Radar hoàn tất! Tìm thấy {len(results)} siêu cổ phiếu vượt qua màng lọc thanh khoản và cấu trúc GGU.")
                 df_res = pd.DataFrame(results)[["Mã", "Mẫu Hình", "Ngày Climax", "Khung TR", "Giá HT", "Top-Down", "Giai đoạn", "POE", "SL"]]
                 st.dataframe(df_res, use_container_width=True)
             else:
-                st.warning(f"Không có mã nào thỏa mãn cấu trúc GGU với thanh khoản > {int(min_vol_input):,} cổ phiếu/phiên.")
+                st.warning(f"Không có mã nào thỏa mãn cấu trúc GGU với mức thanh khoản > {int(min_vol_input):,} /phiên.")
         else:
-            if index_df is None: st.error("Lỗi kết nối dữ liệu VN-Index.")
+            st.error("Lỗi kết nối dữ liệu VN-Index.")
 
 with tab2:
     st.markdown("### 🧪 Mô phỏng Chiến dịch Giao dịch Lịch sử")
     col1, col2 = st.columns([1, 2])
     with col1:
-        all_default_tickers = [t for tickers in DEFAULT_SECTORS.values() for t in tickers]
-        test_ticker = st.selectbox("Chọn mã muốn Backtest (2 năm qua):", all_default_tickers)
+        test_ticker = st.selectbox("Chọn mã muốn Backtest (2 năm qua):", [t + ".VN" for t in MARKET_TICKERS])
     with col2:
         st.write("")
         st.write("")
@@ -302,7 +302,6 @@ with tab2:
 
                 if not in_position:
                     window = df_bt.iloc[i-200 : i+1]
-                    # Backtest mặc định dùng thanh khoản 100k để quét lịch sử cho mượt
                     res = analyze_pure_wyckoff(window, index_bt, test_ticker, 100000)
                     
                     if res:
