@@ -50,13 +50,12 @@ def analyze_ggu_topdown(df, index_df, ticker):
     # =======================================================
     # BƯỚC 1: BỘ LỌC ĐƯỜNG RS (RELATIVE STRENGTH LINE)
     # =======================================================
-    # RS Ratio = Stock Price / Index Price
     rs_line = combined['Close_s'] / combined['Close_i']
     rs_ma50 = rs_line.rolling(50).mean()
     
     # Yêu cầu 1: RS Line phải phá vỡ xu hướng giảm và đang nằm trên MA50 của chính nó (Uptrend in RS)
     if rs_line.iloc[-1] < rs_ma50.iloc[-1]: 
-        return None # Loại bỏ cổ phiếu đang yếu dần so với Index
+        return None 
 
     # =======================================================
     # BƯỚC 2: KIỂM TRA ĐỘNG LƯỢNG VÀ "SWEET SPOT"
@@ -64,7 +63,6 @@ def analyze_ggu_topdown(df, index_df, ticker):
     stock_roc63 = (combined['Close_s'].iloc[-1] - combined['Close_s'].iloc[-63]) / combined['Close_s'].iloc[-63] * 100
     idx_roc63 = (combined['Close_i'].iloc[-1] - combined['Close_i'].iloc[-63]) / combined['Close_i'].iloc[-63] * 100
     
-    # Sweet Spot (Tư duy Roman): Cổ phiếu phải tăng mạnh hơn VNI, hoặc khi VNI chỉnh 20 phiên gần nhất thì cổ phiếu giữ giá tốt hơn
     idx_pullback_20 = (combined['Close_i'].iloc[-1] - combined['Close_i'].iloc[-20]) / combined['Close_i'].iloc[-20] * 100
     stock_pullback_20 = (combined['Close_s'].iloc[-1] - combined['Close_s'].iloc[-20]) / combined['Close_s'].iloc[-20] * 100
     
@@ -75,7 +73,7 @@ def analyze_ggu_topdown(df, index_df, ticker):
         return None
 
     # =======================================================
-    # BƯỚC 3: CẤU TRÚC GIÁ (TRADING RANGE) & SC/ST
+    # BƯỚC 3: CẤU TRÚC GIÁ (TRADING RANGE) & SC
     # =======================================================
     lookback = df.tail(120)
     min_price = lookback['Low'].min()
@@ -107,7 +105,6 @@ def analyze_ggu_topdown(df, index_df, ticker):
     avg_up_vol = up_days['Volume'].mean() if not up_days.empty else 0
     avg_down_vol = down_days['Volume'].mean() if not down_days.empty else 0
     
-    # Nỗ Lực Gom Hàng: Vol nến xanh phải áp đảo Vol nến đỏ
     if avg_down_vol > avg_up_vol: return None 
 
     # =======================================================
@@ -116,35 +113,40 @@ def analyze_ggu_topdown(df, index_df, ticker):
     current_close = float(df['Close'].iloc[-1])
     current_vol = float(df['Volume'].iloc[-1])
     current_open = float(df['Open'].iloc[-1])
+    bottom_zone = tr_low + (box_height * 0.3)
     
     phase = None
     vung_mua_poe = ""
     cat_lo = ""
     
-    # Pha C (Spring / Test Cạn Cung)
     if current_close <= tr_low * 1.05 and current_close >= tr_low * 0.95:
         if current_close > current_open and current_vol < float(df['Vol_MA20'].iloc[-1]) * 0.8:
             phase = "Pha C (Spring/Test)"
             vung_mua_poe = f"Mua nhịp rũ bỏ {round(current_close, 2)}"
             cat_lo = f"Thủng {round(current_close * 0.95, 2)}"
             
-    # Pha D (SOS / LPS)
     elif current_close > float(df['MA50'].iloc[-1]) and current_close < tr_high * 0.98:
         if current_vol > float(df['Vol_MA20'].iloc[-1]) * 1.2 and current_close > current_open:
             phase = "Pha D (SOS - Dòng tiền vào)"
             vung_mua_poe = f"Chờ LPS về {round(float(df['MA50'].iloc[-1]), 2)}"
             cat_lo = f"Thủng MA50 ({round(float(df['MA50'].iloc[-1]) * 0.97, 2)})"
             
-    # Pha E (Mark-up)
     elif current_close > tr_high and current_close > float(df['MA50'].iloc[-1]):
         if current_vol > float(df['Vol_MA20'].iloc[-1]) * 1.5:
             phase = "Pha E (Breakout)"
             vung_mua_poe = f"Chờ BUEC test {round(tr_high, 2)}"
             cat_lo = f"Thủng {round(tr_high * 0.96, 2)}"
 
+    elif current_close <= bottom_zone and current_close >= tr_low:
+        if current_vol < float(df['Vol_MA20'].iloc[-1]) * 0.75:
+            phase = "Pha A/B (Kiểm định biên)"
+            vung_mua_poe = f"Mua hỗ trợ {round(tr_low, 2)} - Target {round(tr_high, 2)}"
+            cat_lo = f"Thủng {round(tr_low * 0.96, 2)}"
+
     if phase:
         return {
             "Mã": ticker.replace(".VN", ""), 
+            "Ngày bắt đầu TR": sc_date.strftime("%d/%m/%Y"), # THÊM LẠI NGÀY BẮT ĐẦU TR (SC)
             "ROC 63 (Cổ/Index)": f"{round(stock_roc63, 1)}% / {round(idx_roc63, 1)}%",
             "Sweet Spot (Pullback)": "⭐ Outperform VNI" if is_sweet_spot else "Theo xu hướng",
             "Khung TR": f"{round(tr_low, 2)} - {round(tr_high, 2)}",
@@ -174,7 +176,6 @@ with tab1:
             for sector, tickers in SECTORS.items():
                 my_bar.progress(count / total_tickers, text=f"2. Đang phân tích sức mạnh Ngành: {sector}...")
                 
-                # Logic Top-Down thực thụ: Đánh giá xu hướng ngành trước khi quét cổ phiếu
                 for t in tickers:
                     df = get_data(t, "2y")
                     if df is not None:
@@ -189,8 +190,8 @@ with tab1:
             my_bar.empty()
             if results:
                 st.success(f"Radar hoàn tất! Có {len(results)} siêu cổ phiếu vượt qua bộ lọc Top-Down & VSA khắt khe.")
-                # Sắp xếp lại cột cho đẹp
-                df_res = pd.DataFrame(results)[["Ngành", "Mã", "ROC 63 (Cổ/Index)", "Sweet Spot (Pullback)", "Khung TR", "Giá HT", "Giai đoạn", "Điểm Mua (POE)", "Cắt Lỗ (SL)"]]
+                # SẮP XẾP LẠI CỘT BÁO CÁO CÓ CHỨA NGÀY BẮT ĐẦU TR
+                df_res = pd.DataFrame(results)[["Ngành", "Mã", "Ngày bắt đầu TR", "Khung TR", "Giá HT", "ROC 63 (Cổ/Index)", "Sweet Spot (Pullback)", "Giai đoạn", "Điểm Mua (POE)", "Cắt Lỗ (SL)"]]
                 st.dataframe(df_res, use_container_width=True)
             else:
                 st.warning("Hiện tại KHÔNG CÓ cổ phiếu nào thỏa mãn cấu trúc Tích lũy và Sức mạnh Lãnh đạo. Đứng ngoài thị trường (Cash is Position)!")
@@ -235,16 +236,23 @@ with tab2:
                         entry_price = current_close
                         entry_date = current_date.strftime("%d/%m/%Y")
                         trade_type = res["Giai đoạn"]
-                        stop_loss = float(window['MA50'].iloc[-1]) * 0.95 # Trailing Stop theo MA50
+                        
+                        # Set Stoploss tuỳ chiến thuật
+                        if "A/B" in trade_type:
+                            tr_low = float(res["Khung TR"].split(" - ")[0])
+                            stop_loss = tr_low * 0.95 
+                        else:
+                            stop_loss = float(window['MA50'].iloc[-1]) * 0.95
 
                 else:
                     sell_reason = ""
                     exit_price = 0
                     
-                    # Khóa lãi bằng Trailing Stop MA50
-                    current_ma50 = float(df_bt['Close'].rolling(50).mean().iloc[i])
-                    new_stop = current_ma50 * 0.95
-                    if new_stop > stop_loss: stop_loss = new_stop 
+                    # Trailing Stop MA50 cho các pha sóng đẩy
+                    if "A/B" not in trade_type:
+                        current_ma50 = float(df_bt['Close'].rolling(50).mean().iloc[i])
+                        new_stop = current_ma50 * 0.95
+                        if new_stop > stop_loss: stop_loss = new_stop 
 
                     if current_low <= stop_loss:
                         exit_price = stop_loss
