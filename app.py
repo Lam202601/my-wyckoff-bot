@@ -4,25 +4,28 @@ import pandas as pd
 import numpy as np
 import time
 
-st.set_page_config(page_title="GGU Master: SCTR & VSA", layout="wide")
+st.set_page_config(page_title="GGU Master: Top-Down & VSA", layout="wide")
 st.title("🏛️ Hệ Thống GGU: SCTR Top-Down & VSA Bar-by-Bar")
-st.markdown("Sự hợp nhất hoàn hảo: Xếp hạng sức mạnh SCTR toàn thị trường và Dò tìm Điểm nổ VSA (Smart Money).")
+st.markdown("Luân chuyển dòng tiền: Xếp hạng Sức mạnh Ngành -> Chọn Cổ phiếu Leader -> Dò tìm Điểm nổ VSA.")
 
-# DANH SÁCH MẶC ĐỊNH (~400 MÃ CƠ BẢN)
-DEFAULT_TICKERS = [
-    "VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB",
-    "SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS",
-    "HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB","DHA","VLB",
-    "VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC",
-    "KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP",
-    "FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR","SAB","VNM","MSN","KDC","MCH","SBT","QNS",
-    "GAS","PVD","PVS","BSR","PLX","OIL","PVC","DGC","DCM","DPM","CSV","GVR","BFC","LAS",
-    "GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP",
-    "POW","REE","PC1","NT2","GEG","TV2","HDG","QTP","HND","BWE","TDM",
-    "VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM",
-    "VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII",
-    "TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","DHG","IMP","BMP","NTP","AAA","GEX"
-]
+# TỪ ĐIỂN PHÂN LOẠI NGÀNH (~400 MÃ CƠ BẢN)
+DEFAULT_SECTORS = {
+    "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB"],
+    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS"],
+    "Thép & Vật liệu": ["HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB","DHA","VLB"],
+    "Bất động sản": ["VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC"],
+    "Khu công nghiệp": ["KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP"],
+    "Bán lẻ & Công nghệ": ["FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR","SAB","VNM","MSN","KDC","MCH","SBT","QNS"],
+    "Dầu khí & Hóa chất": ["GAS","PVD","PVS","BSR","PLX","OIL","PVC","DGC","DCM","DPM","CSV","GVR","BFC","LAS"],
+    "Cảng & Vận tải biển": ["GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP"],
+    "Năng lượng & Tiện ích": ["POW","REE","PC1","NT2","GEG","TV2","HDG","QTP","HND","BWE","TDM"],
+    "Nông nghiệp & Thủy sản": ["VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM"],
+    "Xây dựng & Đầu tư công": ["VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII"],
+    "Dệt may & Khác": ["TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","DHG","IMP","BMP","NTP","AAA","GEX"]
+}
+
+# Tạo bộ map để tra cứu nhanh Ngành của một mã cổ phiếu
+TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
 
 @st.cache_data(ttl=3600)
 def get_data(ticker, period="1y"): 
@@ -130,7 +133,7 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
 # ==========================================
 # GIAO DIỆN WEB
 # ==========================================
-st.markdown("### 🦅 Radar Hợp Nhất: Top-Down (SCTR) & Điểm Nổ Smart Money (VSA)")
+st.markdown("### 🦅 Radar Hợp Nhất: Top-Down Sector & Điểm Nổ Smart Money")
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -140,7 +143,7 @@ with col2:
 with col3:
     uploaded_file = st.file_uploader("Nạp CSV Mã tùy chọn (Cột 1 chứa mã)", type=["csv"])
 
-if st.button("🚀 KÍCH HOẠT HỆ THỐNG GGU MASTER"):
+if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
     raw_results = []
     
     tickers_to_scan = []
@@ -152,10 +155,11 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG GGU MASTER"):
         except:
             st.error("Lỗi đọc file CSV.")
     else:
-        tickers_to_scan = [t + ".VN" for t in DEFAULT_TICKERS]
+        # Gom tất cả các mã từ Từ Điển Ngành ra thành 1 list để quét
+        tickers_to_scan = [t + ".VN" for tickers in DEFAULT_SECTORS.values() for t in tickers]
     
     if tickers_to_scan:
-        my_bar = st.progress(0, text="Đang dung hợp SCTR và VSA...")
+        my_bar = st.progress(0, text="Đang dung hợp SCTR, Phân loại Ngành và VSA...")
         total_tickers = len(tickers_to_scan)
         
         for i, t in enumerate(tickers_to_scan):
@@ -163,7 +167,10 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG GGU MASTER"):
             if df is not None:
                 res = process_ultimate_wyckoff(df, min_vol_input, lookback_input)
                 if res:
-                    res["Mã"] = t.replace(".VN", "")
+                    raw_ticker = t.replace(".VN", "")
+                    res["Mã"] = raw_ticker
+                    # Map Ngành vào kết quả. Nếu mã từ CSV lạ không có trong từ điển thì đưa vào "Khác"
+                    res["Ngành"] = TICKER_TO_SECTOR.get(raw_ticker, "Khác (Từ CSV)") 
                     raw_results.append(res)
             
             my_bar.progress((i + 1) / total_tickers, text=f"Đang phân tích: {t}...")
@@ -174,36 +181,49 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG GGU MASTER"):
         if raw_results:
             df_results = pd.DataFrame(raw_results)
             
-            # Tính % Xếp hạng SCTR
+            # Tính % Xếp hạng SCTR Toàn Thị Trường
             df_results['SCTR Rank'] = df_results['Total_Score'].rank(pct=True) * 100
             df_results['SCTR Rank'] = df_results['SCTR Rank'].round(1)
             
             st.success(f"Quét thành công {len(df_results)} mã qua màng lọc thanh khoản.")
             
-            # --- BẢNG 1: NHỮNG MÃ CÓ ĐIỂM NỔ VSA (ACTIONABLE SETUPS) ---
-            st.markdown("#### 🎯 TÍN HIỆU HÀNH ĐỘNG (CÓ XẾP HẠNG SCTR)")
-            st.markdown("*Đây là các mã vừa phát ra Dấu chân Smart Money. Ưu tiên Mua các mã có tín hiệu VSA kết hợp với SCTR Rank > 70.*")
+            # --- BƯỚC 1: BẢNG XẾP HẠNG NGÀNH (SECTOR ROTATION) ---
+            st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG SỨC MẠNH NGÀNH (DÒNG TIỀN VĨ MÔ)")
+            st.markdown("*Dòng tiền đang chảy vào đâu? Ưu tiên tìm cơ hội ở Top 3 Ngành dẫn dắt.*")
+            
+            # Gom nhóm theo ngành và tính SCTR Trung Bình
+            sector_stats = df_results.groupby('Ngành').agg(
+                SCTR_Trung_Bình=('SCTR Rank', 'mean'),
+                Số_Lượng_Mã=('Mã', 'count')
+            ).reset_index()
+            sector_stats = sector_stats.sort_values(by='SCTR_Trung_Bình', ascending=False).round(1)
+            sector_stats.rename(columns={'SCTR_Trung_Bình': 'Điểm SCTR Trung Bình'}, inplace=True)
+            
+            st.dataframe(sector_stats, use_container_width=True)
+
+            st.divider()
+
+            # --- BƯỚC 2: TÍN HIỆU HÀNH ĐỘNG KẾT HỢP NGÀNH ---
+            st.markdown("#### 🎯 BƯỚC 2: TÍN HIỆU HÀNH ĐỘNG (CỔ PHIẾU CÓ DẤU CHÂN SMART MONEY)")
+            st.markdown("*Các mã vừa nổ điểm VSA. Hãy chú ý các mã có SCTR Rank cao và thuộc nhóm Ngành dẫn dắt ở trên.*")
             
             df_signals = df_results[df_results['VSA_Signal'].notnull()].copy()
             if not df_signals.empty:
-                df_signals = df_signals.sort_values(by="SCTR Rank", ascending=False).reset_index(drop=True)
-                cols_sig = ["Mã", "SCTR Rank", "VSA_Signal", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL", "Thanh Khoản (20đ)"]
-                # FIX: Bỏ .style.background_gradient để không bị lỗi thiếu matplotlib
+                df_signals = df_signals.sort_values(by=["Ngành", "SCTR Rank"], ascending=[True, False]).reset_index(drop=True)
+                cols_sig = ["Ngành", "Mã", "SCTR Rank", "VSA_Signal", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL", "Thanh Khoản (20đ)"]
                 st.dataframe(df_signals[cols_sig], use_container_width=True)
             else:
                 st.info(f"Hiện tại không có mã nào phát tín hiệu VSA trong {lookback_input} ngày qua.")
 
             st.divider()
 
-            # --- BẢNG 2: BẢNG XẾP HẠNG SCTR TỔNG THỂ (TOP DOWN) ---
-            st.markdown("#### 👑 BẢNG XẾP HẠNG SCTR TOÀN THỊ TRƯỜNG")
-            st.markdown("*Bức tranh toàn cảnh: Những Leader đang dẫn dắt thị trường (Chưa tính đến việc có điểm mua VSA hay không).*")
+            # --- BƯỚC 3: XẾP HẠNG SCTR TOÀN THỊ TRƯỜNG ---
+            st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR TOÀN THỊ TRƯỜNG (LỌC THEO NGÀNH)")
+            st.markdown("*Bấm vào tiêu đề cột 'Ngành' để nhóm các cổ phiếu lại, giúp bạn dễ dàng so sánh các đối thủ trong cùng một nhóm.*")
             
             df_ranking = df_results.sort_values(by="SCTR Rank", ascending=False).reset_index(drop=True)
-            cols_rank = ["Mã", "SCTR Rank", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
-            if not df_ranking.empty:
-                # FIX: Bỏ .style.background_gradient để không bị lỗi thiếu matplotlib
-                st.dataframe(df_ranking[cols_rank], use_container_width=True)
+            cols_rank = ["Ngành", "Mã", "SCTR Rank", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
+            st.dataframe(df_ranking[cols_rank], use_container_width=True)
             
         else:
             st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
