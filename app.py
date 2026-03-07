@@ -4,31 +4,31 @@ import pandas as pd
 import numpy as np
 import time
 
-st.set_page_config(page_title="GGU SCTR Screener", layout="wide")
-st.title("🏛️ Hệ Thống GGU: StockCharts Technical Rank (SCTR)")
-st.markdown("Xếp hạng sức mạnh cổ phiếu. Dùng SCTR > 70 để tìm các ứng viên Tái Tích Luỹ / Đẩy Giá chuẩn Wyckoff.")
+st.set_page_config(page_title="GGU Master: SCTR & VSA", layout="wide")
+st.title("🏛️ Hệ Thống GGU: SCTR Top-Down & VSA Bar-by-Bar")
+st.markdown("Sự hợp nhất hoàn hảo: Xếp hạng sức mạnh SCTR toàn thị trường và Dò tìm Điểm nổ VSA (Smart Money).")
 
-# DANH SÁCH MÃ CỔ PHIẾU THANH KHOẢN TỐT THỊ TRƯỜNG VIỆT NAM (Vũ trụ xếp hạng)
-MARKET_TICKERS = [
+# DANH SÁCH MẶC ĐỊNH (~400 MÃ CƠ BẢN)
+DEFAULT_TICKERS = [
     "VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB",
-    "SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS",
-    "HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB",
+    "SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS",
+    "HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB","DHA","VLB",
     "VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC",
-    "KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","D2D",
-    "FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR",
-    "GAS","PVD","PVS","BSR","PLX","DGC","DCM","DPM","CSV","GVR",
-    "GMD","HAH","VSC","PVT","VOS",
-    "POW","REE","PC1","NT2","GEG","TV2","HDG",
-    "VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR",
-    "VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","CII",
-    "TNG","VGT","GIL","MSH","BVH","BMI","MIG","DHG","BMP","NTP","VNM","MSN","SAB"
+    "KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP",
+    "FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR","SAB","VNM","MSN","KDC","MCH","SBT","QNS",
+    "GAS","PVD","PVS","BSR","PLX","OIL","PVC","DGC","DCM","DPM","CSV","GVR","BFC","LAS",
+    "GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP",
+    "POW","REE","PC1","NT2","GEG","TV2","HDG","QTP","HND","BWE","TDM",
+    "VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM",
+    "VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII",
+    "TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","DHG","IMP","BMP","NTP","AAA","GEX"
 ]
 
 @st.cache_data(ttl=3600)
 def get_data(ticker, period="1y"): 
     try:
         df = yf.Ticker(ticker).history(period=period)
-        if len(df) < 200: return None
+        if df is None or len(df) < 200: return None
         return df
     except:
         return None
@@ -45,114 +45,164 @@ def calculate_ppo_hist(close_series):
     ema26 = close_series.ewm(span=26, adjust=False).mean()
     ppo = (ema12 - ema26) / ema26 * 100
     ppo_signal = ppo.ewm(span=9, adjust=False).mean()
-    ppo_hist = ppo - ppo_signal
-    return ppo_hist
+    return ppo - ppo_signal
 
-def calculate_sctr_components(df):
+def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
+    df = df.copy()
+    df.index = pd.to_datetime(df.index).tz_localize(None)
+    
+    # 1. BỘ LỌC THANH KHOẢN
+    df['Vol_MA20'] = df['Volume'].rolling(20).mean()
+    current_vol_ma20 = float(df['Vol_MA20'].iloc[-1])
+    if current_vol_ma20 < min_volume:
+        return None
+        
     close = df['Close']
     
-    # 1. Long-Term (30% each)
+    # 2. TÍNH ĐIỂM SCTR THEO STOCKCHARTS
     ema200 = close.ewm(span=200, adjust=False).mean()
-    pct_above_ema200 = ((close.iloc[-1] - ema200.iloc[-1]) / ema200.iloc[-1]) * 100
-    score_ema200 = pct_above_ema200 * 0.30
+    score_ema200 = (((close.iloc[-1] - ema200.iloc[-1]) / ema200.iloc[-1]) * 100) * 0.30
+    score_roc125 = (((close.iloc[-1] - close.iloc[-125]) / close.iloc[-125]) * 100) * 0.30 if len(close) >= 125 else 0
     
-    roc125 = ((close.iloc[-1] - close.iloc[-125]) / close.iloc[-125]) * 100 if len(close) >= 125 else 0
-    score_roc125 = roc125 * 0.30
-    
-    # 2. Medium-Term (15% each)
     ema50 = close.ewm(span=50, adjust=False).mean()
-    pct_above_ema50 = ((close.iloc[-1] - ema50.iloc[-1]) / ema50.iloc[-1]) * 100
-    score_ema50 = pct_above_ema50 * 0.15
+    score_ema50 = (((close.iloc[-1] - ema50.iloc[-1]) / ema50.iloc[-1]) * 100) * 0.15
+    score_roc20 = (((close.iloc[-1] - close.iloc[-20]) / close.iloc[-20]) * 100) * 0.15 if len(close) >= 20 else 0
     
-    roc20 = ((close.iloc[-1] - close.iloc[-20]) / close.iloc[-20]) * 100 if len(close) >= 20 else 0
-    score_roc20 = roc20 * 0.15
-    
-    # 3. Short-Term (5% each)
     rsi14 = calculate_rsi(close, 14).iloc[-1]
     score_rsi = rsi14 * 0.05 if not np.isnan(rsi14) else 0
     
     ppo_hist = calculate_ppo_hist(close)
-    # Calculate 3-day slope of PPO-Hist (linear regression over last 3 points)
     last_3_hist = ppo_hist.tail(3).values
+    score_ppo = 0
     if len(last_3_hist) == 3 and not np.isnan(last_3_hist).any():
         x = np.array([0, 1, 2])
         slope = np.polyfit(x, last_3_hist, 1)[0]
-        
-        # PPO Slope special rule
-        if slope > 1:
-            score_ppo = 5.0
-        elif slope < -1:
-            score_ppo = 0.0
-        else:
-            score_ppo = 0.05 * ((slope + 1) * 50)
-    else:
-        score_ppo = 0
+        if slope > 1: score_ppo = 5.0
+        elif slope < -1: score_ppo = 0.0
+        else: score_ppo = 0.05 * ((slope + 1) * 50)
         
     total_score = score_ema200 + score_roc125 + score_ema50 + score_roc20 + score_rsi + score_ppo
+
+    # 3. NHẬN DIỆN TÍN HIỆU VSA TRONG X NGÀY QUA
+    df['Spread'] = df['High'] - df['Low']
+    df['Avg_Spread'] = df['Spread'].rolling(20).mean()
+    df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
+    df['Vol_High'] = df['Volume'] > (df['Vol_MA20'] * 1.2)
+    df['Vol_Less_Than_Prev_2'] = (df['Volume'] < df['Volume'].shift(1)) & (df['Volume'] < df['Volume'].shift(2))
+    df['Is_Down_Bar'] = df['Close'] < df['Open']
+    df['Is_Up_Bar'] = df['Close'] > df['Open']
     
+    scan_window = df.tail(vsa_lookback)
+    latest_signal, signal_date, poe, sl = None, "", "", ""
+    
+    for i in range(len(scan_window)):
+        idx = scan_window.index[i]
+        bar = scan_window.iloc[i]
+        support_20d = df['Low'].loc[:idx].tail(21).head(20).min()
+        signal = None
+        
+        # Stopping Volume
+        if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.5:
+            signal, poe, sl = "🔴 Stopping Vol", f"Quan sát quanh {round(bar['Low'], 2)}", f"Thủng {round(bar['Low']*0.95, 2)}"
+        # No Supply
+        elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.5:
+            signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'], 2)}", f"Thủng {round(bar['Low']*0.98, 2)}"
+        # Spring
+        elif bar['Low'] < support_20d and bar['Close_Pos'] >= 0.6 and bar['Vol_High']:
+            signal, poe, sl = "🔥 Spring (Rũ Bỏ)", f"Mua quanh {round(bar['Close'], 2)}", f"Thủng {round(bar['Low']*0.97, 2)}"
+        # SOS
+        elif bar['Is_Up_Bar'] and bar['Spread'] > bar['Avg_Spread'] * 1.2 and bar['Vol_High'] and bar['Close_Pos'] >= 0.7:
+            signal, poe, sl = "🚀 SOS (Cầu Lớn)", f"Chờ LPS về {round(bar['Close'] - (bar['Spread']*0.3), 2)}", f"Thủng {round(bar['Low'], 2)}"
+
+        if signal:
+            latest_signal, signal_date, final_poe, final_sl = signal, idx.strftime("%d/%m/%Y"), poe, sl
+
     return {
         "Giá Hiện Tại": round(close.iloc[-1], 2),
-        "EMA200_Score": round(score_ema200, 2),
-        "ROC125_Score": round(score_roc125, 2),
-        "EMA50_Score": round(score_ema50, 2),
-        "ROC20_Score": round(score_roc20, 2),
-        "RSI_Score": round(score_rsi, 2),
-        "PPO_Score": round(score_ppo, 2),
-        "Total_Score": round(total_score, 2)
+        "Thanh Khoản (20đ)": f"{int(current_vol_ma20):,}",
+        "Total_Score": total_score,
+        "VSA_Signal": latest_signal,
+        "Ngày Tín Hiệu": signal_date,
+        "POE": final_poe if latest_signal else "",
+        "SL": final_sl if latest_signal else ""
     }
 
 # ==========================================
 # GIAO DIỆN WEB
 # ==========================================
-st.markdown("### 🦅 Quét & Xếp Hạng Sức Mạnh Tương Đối (Top-Down GGU)")
+st.markdown("### 🦅 Radar Hợp Nhất: Top-Down (SCTR) & Điểm Nổ Smart Money (VSA)")
 
-col1, col2 = st.columns([1, 2])
+col1, col2, col3 = st.columns(3)
 with col1:
-    st.info("Hệ thống sẽ tải dữ liệu của ~120 mã đại diện thị trường, tính toán điểm nội tại và xếp hạng SCTR chuẩn.")
+    min_vol_input = st.number_input("LỌC THANH KHOẢN TỐI THIỂU:", min_value=10000, value=150000, step=50000)
+with col2:
+    lookback_input = st.number_input("TÌM TÍN HIỆU VSA (Số phiên qua):", min_value=1, value=10, max_value=20)
+with col3:
+    uploaded_file = st.file_uploader("Nạp CSV Mã tùy chọn (Cột 1 chứa mã)", type=["csv"])
 
-if st.button("🚀 KÍCH HOẠT BỘ LỌC SCTR"):
+if st.button("🚀 KÍCH HOẠT HỆ THỐNG GGU MASTER"):
     raw_results = []
-    tickers_to_scan = [t + ".VN" for t in MARKET_TICKERS]
-    total_tickers = len(tickers_to_scan)
     
-    my_bar = st.progress(0, text="Đang tải dữ liệu và tính toán chỉ báo...")
-    
-    for i, t in enumerate(tickers_to_scan):
-        df = get_data(t, "1y")
-        if df is not None:
-            scores = calculate_sctr_components(df)
-            scores["Mã"] = t.replace(".VN", "")
-            raw_results.append(scores)
-        
-        my_bar.progress((i + 1) / total_tickers, text=f"Đang phân tích: {t}...")
-        time.sleep(0.01) # Tránh bị Yahoo chặn
-        
-    my_bar.empty()
-    
-    if raw_results:
-        df_results = pd.DataFrame(raw_results)
-        
-        # TÍNH TOÁN XẾP HẠNG SCTR (Percentile Rank trong nhóm)
-        df_results['SCTR'] = df_results['Total_Score'].rank(pct=True) * 100
-        df_results['SCTR'] = df_results['SCTR'].round(1)
-        
-        # Sắp xếp từ mạnh nhất đến yếu nhất
-        df_results = df_results.sort_values(by="SCTR", ascending=False).reset_index(drop=True)
-        
-        # Định dạng lại bảng hiển thị
-        display_cols = ["Mã", "SCTR", "Giá Hiện Tại", "Total_Score", "ROC125_Score", "ROC20_Score"]
-        df_display = df_results[display_cols]
-        
-        st.success(f"Hoàn tất! Đã xếp hạng SCTR cho {len(df_results)} mã cổ phiếu.")
-        
-        st.markdown("#### 🔥 TOP CỔ PHIẾU LÃNH ĐẠO (SCTR > 75)")
-        st.markdown("*Đây là nhóm cổ phiếu mạnh nhất thị trường. Hãy mở biểu đồ của các mã này lên và dùng kiến thức Wyckoff của bạn để tìm Cấu trúc Tái Tích luỹ (Re-Accumulation) hoặc Điểm Spring.*")
-        
-        top_leaders = df_display[df_display['SCTR'] >= 75]
-        st.dataframe(top_leaders.style.background_gradient(subset=['SCTR'], cmap='Greens'), use_container_width=True)
-        
-        with st.expander("Xem toàn bộ Bảng xếp hạng SCTR"):
-            st.dataframe(df_results, use_container_width=True)
-            
+    tickers_to_scan = []
+    if uploaded_file is not None:
+        try:
+            df_user = pd.read_csv(uploaded_file, header=None)
+            raw_tickers = df_user.iloc[:, 0].dropna().astype(str).tolist()
+            tickers_to_scan = [t.strip().upper() + ".VN" if not t.endswith(".VN") else t.strip().upper() for t in raw_tickers]
+        except:
+            st.error("Lỗi đọc file CSV.")
     else:
-        st.error("Lỗi lấy dữ liệu từ Yahoo Finance. Vui lòng thử lại sau.")
+        tickers_to_scan = [t + ".VN" for t in DEFAULT_TICKERS]
+    
+    if tickers_to_scan:
+        my_bar = st.progress(0, text="Đang dung hợp SCTR và VSA...")
+        total_tickers = len(tickers_to_scan)
+        
+        for i, t in enumerate(tickers_to_scan):
+            df = get_data(t, "1y")
+            if df is not None:
+                res = process_ultimate_wyckoff(df, min_vol_input, lookback_input)
+                if res:
+                    res["Mã"] = t.replace(".VN", "")
+                    raw_results.append(res)
+            
+            my_bar.progress((i + 1) / total_tickers, text=f"Đang phân tích: {t}...")
+            time.sleep(0.01)
+            
+        my_bar.empty()
+        
+        if raw_results:
+            df_results = pd.DataFrame(raw_results)
+            
+            # Tính % Xếp hạng SCTR
+            df_results['SCTR Rank'] = df_results['Total_Score'].rank(pct=True) * 100
+            df_results['SCTR Rank'] = df_results['SCTR Rank'].round(1)
+            
+            st.success(f"Quét thành công {len(df_results)} mã qua màng lọc thanh khoản.")
+            
+            # --- BẢNG 1: NHỮNG MÃ CÓ ĐIỂM NỔ VSA (ACTIONABLE SETUPS) ---
+            st.markdown("#### 🎯 TÍN HIỆU HÀNH ĐỘNG (CÓ XẾP HẠNG SCTR)")
+            st.markdown("*Đây là các mã vừa phát ra Dấu chân Smart Money. Ưu tiên Mua các mã có tín hiệu VSA kết hợp với SCTR Rank > 70.*")
+            
+            df_signals = df_results[df_results['VSA_Signal'].notnull()].copy()
+            if not df_signals.empty:
+                df_signals = df_signals.sort_values(by="SCTR Rank", ascending=False).reset_index(drop=True)
+                cols_sig = ["Mã", "SCTR Rank", "VSA_Signal", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL", "Thanh Khoản (20đ)"]
+                # Đã fix lỗi ValueError: Chỉ tô màu khi bảng không trống
+                st.dataframe(df_signals[cols_sig].style.background_gradient(subset=['SCTR Rank'], cmap='Greens'), use_container_width=True)
+            else:
+                st.info(f"Hiện tại không có mã nào phát tín hiệu VSA trong {lookback_input} ngày qua.")
+
+            st.divider()
+
+            # --- BẢNG 2: BẢNG XẾP HẠNG SCTR TỔNG THỂ (TOP DOWN) ---
+            st.markdown("#### 👑 BẢNG XẾP HẠNG SCTR TOÀN THỊ TRƯỜNG")
+            st.markdown("*Bức tranh toàn cảnh: Những Leader đang dẫn dắt thị trường (Chưa tính đến việc có điểm mua VSA hay không).*")
+            
+            df_ranking = df_results.sort_values(by="SCTR Rank", ascending=False).reset_index(drop=True)
+            cols_rank = ["Mã", "SCTR Rank", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
+            if not df_ranking.empty:
+                st.dataframe(df_ranking[cols_rank].style.background_gradient(subset=['SCTR Rank'], cmap='Blues'), use_container_width=True)
+            
+        else:
+            st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
