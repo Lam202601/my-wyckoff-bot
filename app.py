@@ -4,9 +4,9 @@ import pandas as pd
 import numpy as np
 import time
 
-st.set_page_config(page_title="GGU Master: Top-Down & VSA", layout="wide")
+st.set_page_config(page_title="GGU Master: StockCharts SCTR & VSA", layout="wide")
 st.title("🏛️ Hệ Thống GGU: SCTR Top-Down & VSA Bar-by-Bar")
-st.markdown("Luân chuyển dòng tiền: Xếp hạng Sức mạnh Ngành -> Chọn Cổ phiếu Leader -> Dò tìm Điểm nổ VSA.")
+st.markdown("Thuật toán SCTR chuẩn StockCharts & Dò tìm Điểm nổ VSA theo TradeGuider.")
 
 # TỪ ĐIỂN PHÂN LOẠI NGÀNH (~400 MÃ CƠ BẢN)
 DEFAULT_SECTORS = {
@@ -24,7 +24,6 @@ DEFAULT_SECTORS = {
     "Dệt may & Khác": ["TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","DHG","IMP","BMP","NTP","AAA","GEX"]
 }
 
-# Tạo bộ map để tra cứu nhanh Ngành của một mã cổ phiếu
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
 
 @st.cache_data(ttl=3600)
@@ -36,14 +35,22 @@ def get_data(ticker, period="1y"):
     except:
         return None
 
+# --- BỘ TOÁN TỬ SCTR CHUẨN STOCKCHARTS ---
 def calculate_rsi(series, period=14):
+    """Tính RSI theo phương pháp Wilder's Smoothing chuẩn StockCharts"""
     delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    
+    # Công thức trung bình hàm mũ (EMA) với alpha = 1/period chuẩn J. Welles Wilder
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+    
+    rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
 def calculate_ppo_hist(close_series):
+    """Tính PPO Histogram chuẩn StockCharts"""
     ema12 = close_series.ewm(span=12, adjust=False).mean()
     ema26 = close_series.ewm(span=26, adjust=False).mean()
     ppo = (ema12 - ema26) / ema26 * 100
@@ -54,7 +61,7 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
     df = df.copy()
     df.index = pd.to_datetime(df.index).tz_localize(None)
     
-    # 1. BỘ LỌC THANH KHOẢN
+    # 1. BỘ LỌC THANH KHOẢN (Loại bỏ nhiễu)
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
     current_vol_ma20 = float(df['Vol_MA20'].iloc[-1])
     if current_vol_ma20 < min_volume:
@@ -62,15 +69,25 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
         
     close = df['Close']
     
-    # 2. TÍNH ĐIỂM SCTR THEO STOCKCHARTS
+    # ==============================================================
+    # 2. CHẤM ĐIỂM SCTR THEO CÔNG THỨC WYCKOFF ANALYTICS
+    # ==============================================================
+    
+    # --- Long-Term (Trọng số 60%) ---
     ema200 = close.ewm(span=200, adjust=False).mean()
     score_ema200 = (((close.iloc[-1] - ema200.iloc[-1]) / ema200.iloc[-1]) * 100) * 0.30
-    score_roc125 = (((close.iloc[-1] - close.iloc[-125]) / close.iloc[-125]) * 100) * 0.30 if len(close) >= 125 else 0
     
+    roc125 = close.pct_change(periods=125).iloc[-1] * 100 if len(close) > 125 else 0
+    score_roc125 = roc125 * 0.30
+    
+    # --- Medium-Term (Trọng số 30%) ---
     ema50 = close.ewm(span=50, adjust=False).mean()
     score_ema50 = (((close.iloc[-1] - ema50.iloc[-1]) / ema50.iloc[-1]) * 100) * 0.15
-    score_roc20 = (((close.iloc[-1] - close.iloc[-20]) / close.iloc[-20]) * 100) * 0.15 if len(close) >= 20 else 0
     
+    roc20 = close.pct_change(periods=20).iloc[-1] * 100 if len(close) > 20 else 0
+    score_roc20 = roc20 * 0.15
+    
+    # --- Short-Term (Trọng số 10%) ---
     rsi14 = calculate_rsi(close, 14).iloc[-1]
     score_rsi = rsi14 * 0.05 if not np.isnan(rsi14) else 0
     
@@ -79,14 +96,22 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
     score_ppo = 0
     if len(last_3_hist) == 3 and not np.isnan(last_3_hist).any():
         x = np.array([0, 1, 2])
+        # Tính độ dốc (Slope) bằng Hồi quy tuyến tính qua 3 điểm
         slope = np.polyfit(x, last_3_hist, 1)[0]
-        if slope > 1: score_ppo = 5.0
-        elif slope < -1: score_ppo = 0.0
-        else: score_ppo = 0.05 * ((slope + 1) * 50)
-        
+        # Quy tắc đặc biệt của StockCharts cho PPO Slope
+        if slope > 1: 
+            score_ppo = 5.0
+        elif slope < -1: 
+            score_ppo = 0.0
+        else: 
+            score_ppo = 0.05 * ((slope + 1) * 50)
+            
+    # TỔNG ĐIỂM (RAW SCORE)
     total_score = score_ema200 + score_roc125 + score_ema50 + score_roc20 + score_rsi + score_ppo
 
-    # 3. NHẬN DIỆN TÍN HIỆU VSA TRONG X NGÀY QUA
+    # ==============================================================
+    # 3. NHẬN DIỆN TÍN HIỆU VSA THEO TRADEGUIDER
+    # ==============================================================
     df['Spread'] = df['High'] - df['Low']
     df['Avg_Spread'] = df['Spread'].rolling(20).mean()
     df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
@@ -104,16 +129,16 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
         support_20d = df['Low'].loc[:idx].tail(21).head(20).min()
         signal = None
         
-        # Stopping Volume
+        # 1. Stopping Volume
         if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.5:
             signal, poe, sl = "🔴 Stopping Vol", f"Quan sát quanh {round(bar['Low'], 2)}", f"Thủng {round(bar['Low']*0.95, 2)}"
-        # No Supply
+        # 2. No Supply
         elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.5:
             signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'], 2)}", f"Thủng {round(bar['Low']*0.98, 2)}"
-        # Spring
+        # 3. Spring
         elif bar['Low'] < support_20d and bar['Close_Pos'] >= 0.6 and bar['Vol_High']:
             signal, poe, sl = "🔥 Spring (Rũ Bỏ)", f"Mua quanh {round(bar['Close'], 2)}", f"Thủng {round(bar['Low']*0.97, 2)}"
-        # SOS
+        # 4. SOS
         elif bar['Is_Up_Bar'] and bar['Spread'] > bar['Avg_Spread'] * 1.2 and bar['Vol_High'] and bar['Close_Pos'] >= 0.7:
             signal, poe, sl = "🚀 SOS (Cầu Lớn)", f"Chờ LPS về {round(bar['Close'] - (bar['Spread']*0.3), 2)}", f"Thủng {round(bar['Low'], 2)}"
 
@@ -155,7 +180,6 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
         except:
             st.error("Lỗi đọc file CSV.")
     else:
-        # Gom tất cả các mã từ Từ Điển Ngành ra thành 1 list để quét
         tickers_to_scan = [t + ".VN" for tickers in DEFAULT_SECTORS.values() for t in tickers]
     
     if tickers_to_scan:
@@ -169,8 +193,7 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
                 if res:
                     raw_ticker = t.replace(".VN", "")
                     res["Mã"] = raw_ticker
-                    # Map Ngành vào kết quả. Nếu mã từ CSV lạ không có trong từ điển thì đưa vào "Khác"
-                    res["Ngành"] = TICKER_TO_SECTOR.get(raw_ticker, "Khác (Từ CSV)") 
+                    res["Ngành"] = TICKER_TO_SECTOR.get(raw_ticker, "Khác") 
                     raw_results.append(res)
             
             my_bar.progress((i + 1) / total_tickers, text=f"Đang phân tích: {t}...")
@@ -181,17 +204,17 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
         if raw_results:
             df_results = pd.DataFrame(raw_results)
             
-            # Tính % Xếp hạng SCTR Toàn Thị Trường
+            # TÍNH TOÁN % XẾP HẠNG SCTR TỔNG THỂ
+            # Tính trên chính tập hợp (Universe) các mã thỏa mãn thanh khoản
             df_results['SCTR Rank'] = df_results['Total_Score'].rank(pct=True) * 100
             df_results['SCTR Rank'] = df_results['SCTR Rank'].round(1)
             
             st.success(f"Quét thành công {len(df_results)} mã qua màng lọc thanh khoản.")
             
-            # --- BƯỚC 1: BẢNG XẾP HẠNG NGÀNH (SECTOR ROTATION) ---
+            # --- BƯỚC 1: BẢNG XẾP HẠNG NGÀNH ---
             st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG SỨC MẠNH NGÀNH (DÒNG TIỀN VĨ MÔ)")
-            st.markdown("*Dòng tiền đang chảy vào đâu? Ưu tiên tìm cơ hội ở Top 3 Ngành dẫn dắt.*")
+            st.markdown("*Dòng tiền đang chảy vào đâu? Ưu tiên tìm cơ hội ở Top Ngành dẫn dắt.*")
             
-            # Gom nhóm theo ngành và tính SCTR Trung Bình
             sector_stats = df_results.groupby('Ngành').agg(
                 SCTR_Trung_Bình=('SCTR Rank', 'mean'),
                 Số_Lượng_Mã=('Mã', 'count')
@@ -204,12 +227,12 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
             st.divider()
 
             # --- BƯỚC 2: TÍN HIỆU HÀNH ĐỘNG KẾT HỢP NGÀNH ---
-            st.markdown("#### 🎯 BƯỚC 2: TÍN HIỆU HÀNH ĐỘNG (CỔ PHIẾU CÓ DẤU CHÂN SMART MONEY)")
-            st.markdown("*Các mã vừa nổ điểm VSA. Hãy chú ý các mã có SCTR Rank cao và thuộc nhóm Ngành dẫn dắt ở trên.*")
+            st.markdown("#### 🎯 BƯỚC 2: TÍN HIỆU HÀNH ĐỘNG (DẤU CHÂN SMART MONEY)")
+            st.markdown("*Các mã vừa nổ điểm VSA. Hãy chú ý các mã có SCTR Rank cao (>70) và thuộc nhóm Ngành dẫn dắt ở Bảng 1.*")
             
             df_signals = df_results[df_results['VSA_Signal'].notnull()].copy()
             if not df_signals.empty:
-                df_signals = df_signals.sort_values(by=["Ngành", "SCTR Rank"], ascending=[True, False]).reset_index(drop=True)
+                df_signals = df_signals.sort_values(by=["SCTR Rank"], ascending=False).reset_index(drop=True)
                 cols_sig = ["Ngành", "Mã", "SCTR Rank", "VSA_Signal", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL", "Thanh Khoản (20đ)"]
                 st.dataframe(df_signals[cols_sig], use_container_width=True)
             else:
@@ -218,8 +241,8 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
             st.divider()
 
             # --- BƯỚC 3: XẾP HẠNG SCTR TOÀN THỊ TRƯỜNG ---
-            st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR TOÀN THỊ TRƯỜNG (LỌC THEO NGÀNH)")
-            st.markdown("*Bấm vào tiêu đề cột 'Ngành' để nhóm các cổ phiếu lại, giúp bạn dễ dàng so sánh các đối thủ trong cùng một nhóm.*")
+            st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR CHI TIẾT (TOP DOWN)")
+            st.markdown("*Nhóm các mã mạnh nhất thị trường hiện tại. Click vào tên cột 'Ngành' để nhóm các cổ phiếu đối thủ lại với nhau.*")
             
             df_ranking = df_results.sort_values(by="SCTR Rank", ascending=False).reset_index(drop=True)
             cols_rank = ["Ngành", "Mã", "SCTR Rank", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
