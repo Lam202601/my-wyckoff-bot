@@ -6,22 +6,22 @@ import time
 
 st.set_page_config(page_title="GGU Master: StockCharts SCTR & VSA", layout="wide")
 st.title("🏛️ Hệ Thống GGU: SCTR Top-Down & VSA Bar-by-Bar")
-st.markdown("Thuật toán SCTR chuẩn StockCharts & Dò tìm Điểm nổ VSA theo TradeGuider.")
+st.markdown("Quét toàn diện rổ VN220. Thuật toán SCTR chuẩn StockCharts & Dò tìm Điểm nổ VSA (TradeGuider).")
 
-# TỪ ĐIỂN PHÂN LOẠI NGÀNH (~400 MÃ CƠ BẢN)
+# TỪ ĐIỂN PHÂN LOẠI NGÀNH MỞ RỘNG (~220 MÃ CƠ BẢN - BAO TRỌN RỔ VN200)
 DEFAULT_SECTORS = {
-    "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB"],
-    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS"],
-    "Thép & Vật liệu": ["HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB","DHA","VLB"],
-    "Bất động sản": ["VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC"],
-    "Khu công nghiệp": ["KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP"],
-    "Bán lẻ & Công nghệ": ["FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR","SAB","VNM","MSN","KDC","MCH","SBT","QNS"],
-    "Dầu khí & Hóa chất": ["GAS","PVD","PVS","BSR","PLX","OIL","PVC","DGC","DCM","DPM","CSV","GVR","BFC","LAS"],
-    "Cảng & Vận tải biển": ["GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP"],
-    "Năng lượng & Tiện ích": ["POW","REE","PC1","NT2","GEG","TV2","HDG","QTP","HND","BWE","TDM"],
-    "Nông nghiệp & Thủy sản": ["VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM"],
-    "Xây dựng & Đầu tư công": ["VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII"],
-    "Dệt may & Khác": ["TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","DHG","IMP","BMP","NTP","AAA","GEX"]
+    "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB"],
+    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC"],
+    "Thép & Vật liệu": ["HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB","DHA","VLB","VCS","PLC","PTB","BMP","NTP","AAA"],
+    "Bất động sản": ["VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC","DXS","KHG","HDG","SJS","NBB","ITC","QCG","VPI","TDC"],
+    "Khu công nghiệp": ["KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP","SNZ","SZL","ITA","LHG"],
+    "Bán lẻ & Công nghệ": ["FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR","SAB","VNM","MSN","KDC","MCH","SBT","QNS","VTP","FOX","MML","TTN","VNZ","HAX"],
+    "Dầu khí & Hóa chất": ["GAS","PVD","PVS","BSR","PLX","OIL","PVC","DGC","DCM","DPM","CSV","BFC","LAS","DDV","VTZ","PSH","PVB"],
+    "Cảng & Vận tải biển": ["GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP","MVN","DXP","TCL","PDN"],
+    "Năng lượng & Tiện ích": ["POW","REE","PC1","NT2","GEG","TV2","QTP","HND","BWE","TDM","TTA","SBA","SHI","VSH","CHP"],
+    "Nông nghiệp & Thủy sản": ["VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM","CMX","MPC","HNG","VSL"],
+    "Xây dựng & Đầu tư công": ["VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII","L14","EVG","VEC","TCD","CTI","HTN"],
+    "Cao su, Bảo hiểm & Khác": ["TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","DHG","IMP","GEX","DRC","DRI","DPR","TRC","CSM"]
 }
 
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
@@ -37,20 +37,15 @@ def get_data(ticker, period="1y"):
 
 # --- BỘ TOÁN TỬ SCTR CHUẨN STOCKCHARTS ---
 def calculate_rsi(series, period=14):
-    """Tính RSI theo phương pháp Wilder's Smoothing chuẩn StockCharts"""
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
-    
-    # Công thức trung bình hàm mũ (EMA) với alpha = 1/period chuẩn J. Welles Wilder
     avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
-    
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
 def calculate_ppo_hist(close_series):
-    """Tính PPO Histogram chuẩn StockCharts"""
     ema12 = close_series.ewm(span=12, adjust=False).mean()
     ema26 = close_series.ewm(span=26, adjust=False).mean()
     ppo = (ema12 - ema26) / ema26 * 100
@@ -72,22 +67,18 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
     # ==============================================================
     # 2. CHẤM ĐIỂM SCTR THEO CÔNG THỨC WYCKOFF ANALYTICS
     # ==============================================================
-    
-    # --- Long-Term (Trọng số 60%) ---
     ema200 = close.ewm(span=200, adjust=False).mean()
     score_ema200 = (((close.iloc[-1] - ema200.iloc[-1]) / ema200.iloc[-1]) * 100) * 0.30
     
     roc125 = close.pct_change(periods=125).iloc[-1] * 100 if len(close) > 125 else 0
     score_roc125 = roc125 * 0.30
     
-    # --- Medium-Term (Trọng số 30%) ---
     ema50 = close.ewm(span=50, adjust=False).mean()
     score_ema50 = (((close.iloc[-1] - ema50.iloc[-1]) / ema50.iloc[-1]) * 100) * 0.15
     
     roc20 = close.pct_change(periods=20).iloc[-1] * 100 if len(close) > 20 else 0
     score_roc20 = roc20 * 0.15
     
-    # --- Short-Term (Trọng số 10%) ---
     rsi14 = calculate_rsi(close, 14).iloc[-1]
     score_rsi = rsi14 * 0.05 if not np.isnan(rsi14) else 0
     
@@ -96,9 +87,7 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
     score_ppo = 0
     if len(last_3_hist) == 3 and not np.isnan(last_3_hist).any():
         x = np.array([0, 1, 2])
-        # Tính độ dốc (Slope) bằng Hồi quy tuyến tính qua 3 điểm
         slope = np.polyfit(x, last_3_hist, 1)[0]
-        # Quy tắc đặc biệt của StockCharts cho PPO Slope
         if slope > 1: 
             score_ppo = 5.0
         elif slope < -1: 
@@ -106,7 +95,6 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
         else: 
             score_ppo = 0.05 * ((slope + 1) * 50)
             
-    # TỔNG ĐIỂM (RAW SCORE)
     total_score = score_ema200 + score_roc125 + score_ema50 + score_roc20 + score_rsi + score_ppo
 
     # ==============================================================
@@ -129,16 +117,16 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
         support_20d = df['Low'].loc[:idx].tail(21).head(20).min()
         signal = None
         
-        # 1. Stopping Volume
+        # Stopping Volume
         if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.5:
             signal, poe, sl = "🔴 Stopping Vol", f"Quan sát quanh {round(bar['Low'], 2)}", f"Thủng {round(bar['Low']*0.95, 2)}"
-        # 2. No Supply
+        # No Supply
         elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.5:
             signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'], 2)}", f"Thủng {round(bar['Low']*0.98, 2)}"
-        # 3. Spring
+        # Spring
         elif bar['Low'] < support_20d and bar['Close_Pos'] >= 0.6 and bar['Vol_High']:
             signal, poe, sl = "🔥 Spring (Rũ Bỏ)", f"Mua quanh {round(bar['Close'], 2)}", f"Thủng {round(bar['Low']*0.97, 2)}"
-        # 4. SOS
+        # SOS
         elif bar['Is_Up_Bar'] and bar['Spread'] > bar['Avg_Spread'] * 1.2 and bar['Vol_High'] and bar['Close_Pos'] >= 0.7:
             signal, poe, sl = "🚀 SOS (Cầu Lớn)", f"Chờ LPS về {round(bar['Close'] - (bar['Spread']*0.3), 2)}", f"Thủng {round(bar['Low'], 2)}"
 
@@ -183,7 +171,7 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
         tickers_to_scan = [t + ".VN" for tickers in DEFAULT_SECTORS.values() for t in tickers]
     
     if tickers_to_scan:
-        my_bar = st.progress(0, text="Đang dung hợp SCTR, Phân loại Ngành và VSA...")
+        my_bar = st.progress(0, text="Đang dung hợp SCTR, Phân loại Ngành và VSA (Rổ VN220)...")
         total_tickers = len(tickers_to_scan)
         
         for i, t in enumerate(tickers_to_scan):
@@ -197,7 +185,7 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
                     raw_results.append(res)
             
             my_bar.progress((i + 1) / total_tickers, text=f"Đang phân tích: {t}...")
-            time.sleep(0.01)
+            time.sleep(0.01) # Delay nhẹ bảo vệ API
             
         my_bar.empty()
         
@@ -205,7 +193,6 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
             df_results = pd.DataFrame(raw_results)
             
             # TÍNH TOÁN % XẾP HẠNG SCTR TỔNG THỂ
-            # Tính trên chính tập hợp (Universe) các mã thỏa mãn thanh khoản
             df_results['SCTR Rank'] = df_results['Total_Score'].rank(pct=True) * 100
             df_results['SCTR Rank'] = df_results['SCTR Rank'].round(1)
             
