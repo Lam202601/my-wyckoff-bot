@@ -4,24 +4,24 @@ import pandas as pd
 import numpy as np
 import time
 
-st.set_page_config(page_title="Wyckoff Master: The Unified GGU", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bar Anatomy & Swing Dynamics")
-st.markdown("Tổng hợp: Lọc Thanh khoản, Nhận diện SC/BC qua Swing, CHoB/CHoC, và Giải phẫu Bar (Phase C).")
+st.set_page_config(page_title="Wyckoff Master: Auto Time-Window", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Quét Tín Hiệu Đa Khung Thời Gian")
+st.markdown("Tự động quét ~400 mã. Tìm kiếm tín hiệu Wyckoff (Phase C/D/E) xuất hiện trong 2 tuần gần nhất.")
 
-# TÍCH HỢP ~400 MÃ THANH KHOẢN TỐT NHẤT THỊ TRƯỜNG VIỆT NAM
+# DATABASE TÍCH HỢP SẴN: ~400 MÃ THANH KHOẢN TỐT NHẤT
 MARKET_TICKERS = [
-    "VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB",
-    "SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS",
-    "HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB",
-    "VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC",
-    "KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","D2D",
-    "FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR",
-    "GAS","PVD","PVS","BSR","PLX","DGC","DCM","DPM","CSV","GVR",
-    "GMD","HAH","VSC","PVT","VOS","PHP",
-    "POW","REE","PC1","NT2","GEG","TV2","HDG",
-    "VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR",
-    "VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","CII",
-    "TNG","VGT","GIL","MSH","BVH","BMI","MIG","DHG","BMP","NTP","VNM","MSN","SAB"
+    "VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB",
+    "SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG",
+    "HPG","HSG","NKG","VGS","SMC","TLH","HT1","BCC","KSB","DHA","VLB",
+    "VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","KHG","SCR","HQC","DXS",
+    "KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP",
+    "FPT","MWG","PNJ","FRT","DGW","PET","CMG","ELC","VGI","CTR","SAB","VNM","MSN","KDC","MCH","SBT","QNS",
+    "GAS","PVD","PVS","BSR","PLX","OIL","PVC","DGC","DCM","DPM","CSV","GVR","BFC","LAS",
+    "GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP",
+    "POW","REE","PC1","NT2","GEG","TV2","HDG","QTP","HND","BWE","TDM",
+    "VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM",
+    "VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII",
+    "TNG","VGT","GIL","MSH","STK","TCM","BVH","BMI","MIG","PVI","DHG","IMP","BMP","NTP","AAA","GEX"
 ]
 
 @st.cache_data(ttl=900)
@@ -42,7 +42,7 @@ def get_index_data(period="2y"):
     except:
         return yf.Ticker("E1VFVN30.VN").history(period=period)
 
-def analyze_unified_wyckoff(df, index_df, ticker, min_volume):
+def analyze_pure_wyckoff(df, index_df, ticker, min_volume, signal_lookback):
     df = df.copy()
     index_df = index_df.copy()
     
@@ -53,236 +53,210 @@ def analyze_unified_wyckoff(df, index_df, ticker, min_volume):
 
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
-    # =======================================================
-    # 0. LIQUIDITY GATEKEEPER
-    # =======================================================
+    # BƯỚC 0: LỌC THANH KHOẢN (Loại Penny)
     current_vol_ma20 = float(df['Vol_MA20'].iloc[-1])
     if current_vol_ma20 < min_volume:
         return None 
 
-    # =======================================================
-    # 1. TOP-DOWN MACRO (RS & ROC)
-    # =======================================================
+    # BƯỚC 1: ĐO LƯỜNG TOP-DOWN
     stock_roc63 = (combined['Close_s'].iloc[-1] - combined['Close_s'].iloc[-63]) / combined['Close_s'].iloc[-63] * 100
     idx_roc63 = (combined['Close_i'].iloc[-1] - combined['Close_i'].iloc[-63]) / combined['Close_i'].iloc[-63] * 100
     rs_line = combined['Close_s'] / combined['Close_i']
     is_rs_uptrend = rs_line.iloc[-1] > rs_line.rolling(50).mean().iloc[-1]
     is_leader = (stock_roc63 > idx_roc63) and is_rs_uptrend
 
-    # =======================================================
-    # 2. IDENTIFY CLIMAX BY CONTEXT (NO MA USED)
-    # =======================================================
-    # Look back 200 days, leaving the last 40 days for Phase C/D development
+    # BƯỚC 2: TÌM SỰ KIỆN CLIMAX (PURE PRICE ACTION)
     lookback = df.tail(200)
     base_window = lookback.iloc[:-40] 
-    if len(base_window) < 60: return None
+    if len(base_window) < 50: return None
     
     climax_date = base_window['Volume'].idxmax()
     c_high = float(df.loc[climax_date]['High'])
     c_low = float(df.loc[climax_date]['Low'])
     c_vol = float(df.loc[climax_date]['Volume'])
 
-    # Analyze the 30-bar swing prior to the Climax to define Context
     pre_climax = df.loc[:climax_date].tail(30)
     if len(pre_climax) < 10: return None
-    
     pre_highest = float(pre_climax['High'].max())
     pre_lowest = float(pre_climax['Low'].min())
-    
-    # Is it a drop into a Climax (SC) or a rally into a Climax (BC)?
-    is_sc = c_low <= (pre_lowest * 1.03) # Near the bottom of the recent swing
-    is_bc = c_high >= (pre_highest * 0.97) # Near the top of the recent swing
+
+    is_sc = c_low <= pre_lowest * 1.03 
+    is_bc = c_high >= pre_highest * 0.97 
 
     if not (is_sc or is_bc): return None
 
     tr_high, tr_low, c_type = 0, 0, ""
 
-    # =======================================================
-    # 3. SWING DYNAMICS: CHoB & CHoC
-    # =======================================================
+    # BƯỚC 3: ĐỘNG LỰC HỌC SÓNG (CHoB / CHoC)
     after_climax = df.loc[climax_date:]
-    
     if is_sc:
         c_type = "Tích Luỹ Đáy (SC)"
-        # AR: First major up-swing
-        ar_window = after_climax.head(30)
-        ar_date = ar_window['High'].idxmax()
-        ar_high = float(ar_window.loc[ar_date]['High'])
+        ar_date = after_climax.head(30)['High'].idxmax()
+        ar_high = float(after_climax.loc[ar_date]['High'])
+        if (ar_high - c_low) / c_low < 0.05: return None
         
-        # CHoB: Must break the downward rhythm (e.g., > 6% bounce)
-        if (ar_high - c_low) / c_low < 0.06: return None
-        
-        # ST: Next down-swing testing the SC
-        st_window = df.loc[ar_date:].head(25)
-        if st_window.empty: return None
-        st_date = st_window['Low'].idxmin()
+        after_ar = df.loc[ar_date:].head(25)
+        if after_ar.empty: return None
+        st_date = after_ar['Low'].idxmin()
         st_vol = float(df.loc[st_date]['Volume'])
-        
-        # CHoC: Volume signature of ST must be exhausted compared to SC
         if st_vol >= c_vol * 0.8: return None 
         
         tr_low, tr_high = c_low, ar_high
 
     elif is_bc:
         c_type = "Tái Tích Luỹ (BC)"
-        # AR: First major down-swing reaction
-        ar_window = after_climax.head(30)
-        ar_date = ar_window['Low'].idxmin()
-        ar_low = float(ar_window.loc[ar_date]['Low'])
+        ar_date = after_climax.head(30)['Low'].idxmin()
+        ar_low = float(after_climax.loc[ar_date]['Low'])
+        if (c_high - ar_low) / c_high < 0.05: return None
         
-        # CHoB: Must break the upward FOMO rhythm
-        if (c_high - ar_low) / c_high < 0.06: return None
-        
-        # ST: Next up-swing testing the BC
-        st_window = df.loc[ar_date:].head(25)
-        if st_window.empty: return None
-        st_date = st_window['High'].idxmax()
+        after_ar = df.loc[ar_date:].head(25)
+        if after_ar.empty: return None
+        st_date = after_ar['High'].idxmax()
         st_vol = float(df.loc[st_date]['Volume'])
-        
-        # CHoC: Volume on the re-test of the high must dry up
         if st_vol >= c_vol * 0.8: return None
         
         tr_high, tr_low = c_high, ar_low
 
-    if tr_low == 0 or (tr_high - tr_low) / tr_low < 0.05: return None
+    if tr_low == 0 or tr_low >= tr_high or (tr_high - tr_low) / tr_low < 0.05: return None
 
-    # =======================================================
-    # 4. VSA: OVERALL EFFORT IN THE TRADING RANGE
-    # =======================================================
+    # BƯỚC 4: LỌC BẪY PHÂN PHỐI TRONG TR
     since_climax = df.loc[climax_date:]
     up_days = since_climax[since_climax['Close'] > since_climax['Open']]
     down_days = since_climax[since_climax['Close'] < since_climax['Open']]
-    
-    # Reject Distribution traps (Down volume > Up volume)
     if (down_days['Volume'].sum() if not down_days.empty else 0) > (up_days['Volume'].sum() if not up_days.empty else 0): 
         return None 
 
     # =======================================================
-    # 5. BAR ANATOMY & POE (Phase Identification)
+    # BƯỚC 5: TÌM TÍN HIỆU TRONG CỬA SỔ THỜI GIAN (LOOKBACK)
     # =======================================================
-    current_close = float(df['Close'].iloc[-1])
-    current_open = float(df['Open'].iloc[-1])
-    current_high = float(df['High'].iloc[-1])
-    current_low = float(df['Low'].iloc[-1])
-    current_vol = float(df['Volume'].iloc[-1])
-    
     box_height = tr_high - tr_low
     bottom_zone = tr_low + (box_height * 0.3)
     middle_zone = tr_low + (box_height * 0.6)
     
-    phase, vung_mua_poe, cat_lo = None, "", ""
+    latest_phase = None
+    latest_poe = ""
+    latest_sl = ""
+    signal_date = ""
+
+    # Quét từ ngày `Hiện tại - Lookback` cho đến Hiện tại
+    scan_start = max(0, len(df) - signal_lookback)
     
-    # PHA C (SPRING): Bar Anatomy Logic from GGU Video
-    # 1. Penetration & Proximity: Dips below/near support, but not a total breakdown (>8%)
-    if current_low <= tr_low * 1.02 and current_low >= tr_low * 0.92:
-        spread = current_high - current_low
-        if spread > 0:
-            close_position = (current_close - current_low) / spread
-            # 2. Anatomy: Close must be off the lows (e.g., upper 50% of the bar) indicating stopping action
-            if close_position >= 0.5 and current_vol > float(df['Vol_MA20'].iloc[-1]) * 0.8:
-                phase = "Pha C (Spring/Test)"
-                vung_mua_poe = f"Mua rũ bỏ (Close off lows) tại {round(current_close, 2)}"
-                cat_lo = f"Thủng Low của Spring: {round(current_low * 0.98, 2)}"
-            
-    # PHA D (SOS / LPS) - Requires Leader Status
-    elif current_close > middle_zone and current_close < tr_high * 0.98:
-        if current_vol > float(df['Vol_MA20'].iloc[-1]) * 1.2 and current_close > current_open:
-            if is_leader:
-                phase = "Pha D (SOS - Điểm Nổ)"
-                vung_mua_poe = f"Chờ LPS về {round(middle_zone, 2)}"
-                cat_lo = f"Thủng {round(bottom_zone, 2)}"
-            
-    # PHA E (BREAKOUT) - Requires Leader Status
-    elif current_close >= tr_high:
-        if current_vol > float(df['Vol_MA20'].iloc[-1]) * 1.5:
-            if is_leader:
-                phase = "Pha E (Breakout)"
-                vung_mua_poe = f"Chờ BUEC test {round(tr_high, 2)}"
-                cat_lo = f"Thủng {round(tr_high * 0.95, 2)}"
+    for i in range(scan_start, len(df)):
+        curr_close = float(df['Close'].iloc[i])
+        curr_open = float(df['Open'].iloc[i])
+        curr_high = float(df['High'].iloc[i])
+        curr_low = float(df['Low'].iloc[i])
+        curr_vol = float(df['Volume'].iloc[i])
+        curr_vol_ma20 = float(df['Vol_MA20'].iloc[i])
+        curr_date = df.index[i].strftime("%d/%m/%Y")
+        
+        phase = None
+        vung_mua_poe = ""
+        cat_lo = ""
+        
+        # Pha C (Spring - Rũ bỏ)
+        if curr_low <= tr_low * 1.03 and curr_low >= tr_low * 0.90:
+            spread = curr_high - curr_low
+            if spread > 0:
+                close_position = (curr_close - curr_low) / spread
+                if close_position >= 0.4 and curr_vol > curr_vol_ma20 * 0.8:
+                    phase = "Pha C (Spring/Test)"
+                    vung_mua_poe = f"Mua tại {round(curr_close, 2)}"
+                    cat_lo = f"Thủng {round(curr_low * 0.98, 2)}"
+                
+        # Pha D (SOS - Điểm nổ)
+        elif curr_close > middle_zone and curr_close < tr_high * 0.98:
+            if curr_vol > curr_vol_ma20 * 1.2 and curr_close > curr_open:
+                if is_leader:
+                    phase = "Pha D (SOS)"
+                    vung_mua_poe = f"Chờ LPS về {round(middle_zone, 2)}"
+                    cat_lo = f"Thủng {round(bottom_zone, 2)}"
+                
+        # Pha E (Breakout đỉnh hộp)
+        elif curr_close >= tr_high:
+            if curr_vol > curr_vol_ma20 * 1.5:
+                if is_leader:
+                    phase = "Pha E (Breakout)"
+                    vung_mua_poe = f"Chờ BUEC {round(tr_high, 2)}"
+                    cat_lo = f"Thủng {round(tr_high * 0.95, 2)}"
 
-    # PHA A/B (RANGE TRADING)
-    elif current_close <= bottom_zone and current_close >= tr_low:
-        if current_vol < float(df['Vol_MA20'].iloc[-1]):
-            phase = "Pha A/B (Swing TR)"
-            vung_mua_poe = f"Swing hỗ trợ {round(tr_low, 2)}"
-            cat_lo = f"Thủng cứng: {round(tr_low * 0.96, 2)}"
+        # Ghi nhận tín hiệu nếu có (Sẽ ưu tiên ghi đè tín hiệu gần nhất)
+        if phase:
+            latest_phase = phase
+            latest_poe = vung_mua_poe
+            latest_sl = cat_lo
+            signal_date = curr_date
 
-    if phase:
+    # Nếu tìm thấy tín hiệu trong X ngày qua, trả về kết quả
+    if latest_phase:
         return {
             "Mã": ticker.replace(".VN", ""), 
+            "Ngày Báo Tín Hiệu": signal_date, # Thêm cột ngày báo tín hiệu
             "Mẫu Hình": c_type,
-            "Ngày Climax": climax_date.strftime("%d/%m/%Y"),
-            "Động Lực": "✅ CHoB & CHoC",
-            "Top-Down": "⭐ Leader" if is_leader else "Tích luỹ",
             "Khung TR": f"{round(tr_low, 2)} - {round(tr_high, 2)}",
-            "Giá HT": round(current_close, 2), 
-            "Giai đoạn": phase,
-            "POE": vung_mua_poe,
-            "SL": cat_lo
+            "Giá Hiện Tại": round(float(df['Close'].iloc[-1]), 2), # Cập nhật giá mới nhất
+            "Tín Hiệu (Gần đây)": latest_phase,
+            "Top-Down": "⭐ Leader" if is_leader else "Tích luỹ",
+            "POE": latest_poe,
+            "SL": latest_sl
         }
     return None
 
 # ==========================================
 # GIAO DIỆN WEB (TABS)
 # ==========================================
-tab1, tab2 = st.tabs(["🎯 Auto Radar Toàn Thị Trường", "🧪 Backtest Chiến Dịch Lịch Sử"])
+tab1, tab2 = st.tabs(["🎯 Auto Radar (Tín Hiệu Đa Phiên)", "🧪 Backtest Lịch Sử"])
 
 with tab1:
-    st.markdown("### 🦅 Quét Tín Hiệu: Giải Phẫu Bar, Pivot & Top-Down (GGU Master)")
+    st.markdown("### 🦅 Quét Tín Hiệu: Bắt Sóng Wyckoff Trong Cửa Sổ Thời Gian")
     
-    min_vol_input = st.number_input(
-        "BỘ LỌC THANH KHOẢN: Trung bình Khối lượng 20 phiên tối thiểu:", 
-        min_value=50000, max_value=2000000, value=200000, step=50000,
-        help="Lọc bỏ mã rác trước khi quét thuật toán."
-    )
+    colA, colB = st.columns(2)
+    with colA:
+        min_vol_input = st.number_input(
+            "BỘ LỌC THANH KHOẢN (Cổ phiếu/Phiên):", 
+            min_value=50000, max_value=2000000, value=200000, step=50000
+        )
+    with colB:
+        signal_lookback_input = st.number_input(
+            "SỐ PHIÊN QUÉT TÍN HIỆU (Lookback):", 
+            min_value=1, max_value=20, value=10, step=1,
+            help="10 = Tìm các tín hiệu xuất hiện trong vòng 2 tuần qua (10 phiên)."
+        )
     
-    uploaded_file = st.file_uploader("Tùy chọn: Tải CSV chứa danh sách mã riêng (cột 1 chứa mã)", type=["csv"])
-    
-    if st.button("🚀 KÍCH HOẠT RADAR TỰ ĐỘNG"):
+    if st.button("🚀 KÍCH HOẠT RADAR"):
         results = []
-        my_bar = st.progress(0, text="Đang khởi tạo Radar...")
+        my_bar = st.progress(0, text="Khởi tạo Radar tự động hoàn toàn...")
         index_df = get_index_data("2y")
         
-        tickers_to_scan = []
-        if uploaded_file is not None:
-            try:
-                df_user = pd.read_csv(uploaded_file, header=None)
-                raw_tickers = df_user.iloc[:, 0].dropna().astype(str).tolist()
-                tickers_to_scan = [t.strip().upper() + ".VN" if not t.endswith(".VN") else t.strip().upper() for t in raw_tickers]
-            except Exception as e:
-                st.error("Lỗi đọc file CSV.")
-        else:
-            tickers_to_scan = [t + ".VN" for t in MARKET_TICKERS]
+        tickers_to_scan = [t + ".VN" for t in MARKET_TICKERS]
         
-        if index_df is not None and tickers_to_scan:
+        if index_df is not None:
             total_tickers = len(tickers_to_scan)
             count = 0
             
-            try:
-                for t in tickers_to_scan:
-                    df = get_data(t, "2y")
-                    if df is not None:
-                        res = analyze_unified_wyckoff(df, index_df, t, min_vol_input)
-                        if res: 
-                            results.append(res)
-                    count += 1
-                    my_bar.progress(count / total_tickers, text=f"Đang phân tích Anatomy & Pivot: {t}...")
-                    time.sleep(0.01) 
-            except Exception as e:
-                st.warning("Yahoo Finance API Limit. Đang xuất kết quả tạm...")
+            for t in tickers_to_scan:
+                df = get_data(t, "2y")
+                if df is not None:
+                    res = analyze_pure_wyckoff(df, index_df, t, min_vol_input, signal_lookback_input)
+                    if res: 
+                        results.append(res)
+                count += 1
+                my_bar.progress(count / total_tickers, text=f"Đang dò tìm tín hiệu {signal_lookback_input} ngày qua: {t}...")
+                time.sleep(0.01) 
                 
             my_bar.empty()
             if results:
-                st.success(f"Radar hoàn tất! Có {len(results)} mã thỏa mãn cấu trúc Bar & Swing Dynamics.")
-                df_res = pd.DataFrame(results)[["Mã", "Mẫu Hình", "Ngày Climax", "Động Lực", "Khung TR", "Giá HT", "Top-Down", "Giai đoạn", "POE", "SL"]]
+                st.success(f"Radar hoàn tất! Có {len(results)} mã phát tín hiệu Wyckoff trong {signal_lookback_input} phiên gần nhất.")
+                # Sắp xếp hiển thị
+                df_res = pd.DataFrame(results)[["Mã", "Ngày Báo Tín Hiệu", "Mẫu Hình", "Tín Hiệu (Gần đây)", "Khung TR", "Giá Hiện Tại", "Top-Down", "POE", "SL"]]
                 st.dataframe(df_res, use_container_width=True)
             else:
-                st.warning(f"Không có mã nào thỏa mãn cấu trúc GGU khắt khe hôm nay.")
+                st.warning(f"Thị trường ảm đạm: Không có mã nào phát tín hiệu GGU trong {signal_lookback_input} phiên qua.")
         else:
-            if index_df is None: st.error("Lỗi kết nối dữ liệu VN-Index.")
+            st.error("Lỗi kết nối dữ liệu VN-Index.")
 
 with tab2:
-    st.markdown("### 🧪 Mô phỏng Chiến dịch Giao dịch")
+    st.markdown("### 🧪 Mô phỏng Chiến dịch Giao dịch Lịch sử")
     col1, col2 = st.columns([1, 2])
     with col1:
         test_ticker = st.selectbox("Chọn mã muốn Backtest:", [t + ".VN" for t in MARKET_TICKERS])
@@ -297,13 +271,14 @@ with tab2:
         
         if df_bt is not None and index_bt is not None:
             df_bt.index = pd.to_datetime(df_bt.index).tz_localize(None)
-            df_bt['MA50'] = df_bt['Close'].rolling(50).mean() # Dùng MA50 cho Trailing Stop loss lúc quản trị vốn
+            df_bt['MA50'] = df_bt['Close'].rolling(50).mean()
             
             trades = []
             in_position = False
             entry_price, stop_loss = 0, 0
             trade_type, entry_date = "", ""
 
+            # Backtest quét từng phiên
             for i in range(200, len(df_bt)):
                 current_date = df_bt.index[i]
                 current_close = float(df_bt['Close'].iloc[i])
@@ -311,15 +286,16 @@ with tab2:
 
                 if not in_position:
                     window = df_bt.iloc[i-200 : i+1]
-                    res = analyze_unified_wyckoff(window, index_bt, test_ticker, 100000)
+                    # Trong lúc backtest, lookback tín hiệu là 1 (chỉ xét ngày đang test)
+                    res = analyze_pure_wyckoff(window, index_bt, test_ticker, 100000, 1)
                     
                     if res:
                         in_position = True
                         entry_price = current_close
                         entry_date = current_date.strftime("%d/%m/%Y")
-                        trade_type = res["Giai đoạn"]
+                        trade_type = res["Tín Hiệu (Gần đây)"]
                         
-                        if "A/B" in trade_type or "Pha C" in trade_type:
+                        if "Pha C" in trade_type:
                             tr_low = float(res["Khung TR"].split(" - ")[0])
                             stop_loss = tr_low * 0.95 
                         else:
@@ -328,7 +304,7 @@ with tab2:
                 else:
                     sell_reason, exit_price = "", 0
                     
-                    if "A/B" not in trade_type and "Pha C" not in trade_type:
+                    if "Pha C" not in trade_type:
                         current_ma50 = float(df_bt['MA50'].iloc[i])
                         new_stop = current_ma50 * 0.95
                         if new_stop > stop_loss: stop_loss = new_stop 
