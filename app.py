@@ -188,8 +188,8 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG GGU MASTER"):
             if not df_signals.empty:
                 df_signals = df_signals.sort_values(by="SCTR Rank", ascending=False).reset_index(drop=True)
                 cols_sig = ["Mã", "SCTR Rank", "VSA_Signal", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL", "Thanh Khoản (20đ)"]
-                # Đã fix lỗi ValueError: Chỉ tô màu khi bảng không trống
-                st.dataframe(df_signals[cols_sig].style.background_gradient(subset=['SCTR Rank'], cmap='Greens'), use_container_width=True)
+                # FIX: Bỏ .style.background_gradient để không bị lỗi thiếu matplotlib
+                st.dataframe(df_signals[cols_sig], use_container_width=True)
             else:
                 st.info(f"Hiện tại không có mã nào phát tín hiệu VSA trong {lookback_input} ngày qua.")
 
@@ -202,7 +202,8 @@ if st.button("🚀 KÍCH HOẠT HỆ THỐNG GGU MASTER"):
             df_ranking = df_results.sort_values(by="SCTR Rank", ascending=False).reset_index(drop=True)
             cols_rank = ["Mã", "SCTR Rank", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
             if not df_ranking.empty:
-                st.dataframe(df_ranking[cols_rank].style.background_gradient(subset=['SCTR Rank'], cmap='Blues'), use_container_width=True)
+                # FIX: Bỏ .style.background_gradient để không bị lỗi thiếu matplotlib
+                st.dataframe(df_ranking[cols_rank], use_container_width=True)
             
         else:
             st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
