@@ -6,9 +6,9 @@ import time
 
 st.set_page_config(page_title="GGU Master: Fast Engine", layout="wide")
 st.title("🏛️ Hệ Thống GGU: SCTR & VSA (Phiên bản Siêu tốc)")
-st.info("🚀 Đã nâng cấp lõi tải dữ liệu đa luồng. Tốc độ quét nhanh gấp 10 lần phiên bản cũ.")
+st.info("🚀 Nâng cấp: Tích hợp Giải phẫu nến Spring & Proximity Check (Quản trị rủi ro cắt lỗ).")
 
-# TỪ ĐIỂM NGÀNH CHUẨN (VN220)
+# TỪ ĐIỂN NGÀNH CHUẨN (VN220)
 DEFAULT_SECTORS = {
     "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB"],
     "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC"],
@@ -33,7 +33,7 @@ DEFAULT_SECTORS = {
 
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
 
-# --- CÁC HÀM TÍNH TOÁN (GIỮ NGUYÊN LOGIC GGU) ---
+# --- CÁC HÀM TÍNH TOÁN LÕI ---
 def calculate_rsi(series, period=21):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -50,7 +50,7 @@ def calculate_ppo_hist(close_series):
     ppo_signal = ppo.ewm(span=9, adjust=False).mean()
     return ppo - ppo_signal
 
-def analyze_ticker_data(ticker_df, min_volume, vsa_lookback):
+def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, max_penetration):
     if ticker_df is None or len(ticker_df) < 260:
         return None
     
@@ -65,7 +65,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback):
         
     close = df['Close']
     
-    # 2. SCTR GGU
+    # 2. SCTR GGU CUSTOM (252 - 63 - 21)
     ema200 = close.ewm(span=200, adjust=False).mean()
     score_ema200 = (((close.iloc[-1] - ema200.iloc[-1]) / ema200.iloc[-1]) * 100) * 0.30
     roc252 = close.pct_change(periods=252).iloc[-1] * 100 if len(close) > 252 else 0
@@ -88,9 +88,10 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback):
     
     total_score = score_ema200 + score_roc252 + score_ema50 + score_roc63 + score_rsi + score_ppo
 
-    # 3. VSA
+    # 3. VSA & SPRING ANATOMY
     df['Spread'] = df['High'] - df['Low']
     df['Avg_Spread'] = df['Spread'].rolling(20).mean()
+    # Close Position (0 = Đáy nến, 1 = Đỉnh nến)
     df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
     df['Vol_High'] = df['Volume'] > (df['Vol_MA20'] * 1.2)
     df['Vol_Less_Than_Prev_2'] = (df['Volume'] < df['Volume'].shift(1)) & (df['Volume'] < df['Volume'].shift(2))
@@ -103,17 +104,43 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback):
     for i in range(len(scan_window)):
         idx = scan_window.index[i]
         bar = scan_window.iloc[i]
-        support_20d = df['Low'].loc[:idx].tail(21).head(20).min()
+        current_loc = df.index.get_loc(idx)
+        
+        # --- BƯỚC 1: XÁC ĐỊNH HỖ TRỢ THEO LOOKBACK TÙY CHỈNH ---
+        if current_loc >= spring_lookback:
+            support_low = df['Low'].iloc[current_loc - spring_lookback : current_loc].min()
+        else:
+            support_low = df['Low'].iloc[0 : current_loc].min() if current_loc > 0 else bar['Low']
+            
         signal = None
         
-        if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.5:
-            signal, poe, sl = "🔴 Stopping Vol", f"Quan sát quanh {round(bar['Low'], 2)}", f"Thủng {round(bar['Low']*0.95, 2)}"
-        elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.5:
+        # Các tín hiệu cơ bản
+        if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.4:
+            signal, poe, sl = "🔴 Stopping Vol", f"Quan sát {round(bar['Low'], 2)}", f"Thủng {round(bar['Low']*0.95, 2)}"
+            
+        elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.4:
             signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'], 2)}", f"Thủng {round(bar['Low']*0.98, 2)}"
-        elif bar['Low'] < support_20d and bar['Close_Pos'] >= 0.6 and bar['Vol_High']:
-            signal, poe, sl = "🔥 Spring (Rũ Bỏ)", f"Mua quanh {round(bar['Close'], 2)}", f"Thủng {round(bar['Low']*0.97, 2)}"
+            
+        # --- BƯỚC 2: GIẢI PHẪU WYCKOFF SPRING CHUẨN MỰC ---
+        elif bar['Low'] < support_low:
+            # Tính toán độ xuyên thủng (%)
+            penetration_pct = (support_low - bar['Low']) / support_low * 100
+            
+            # Logic cốt lõi: 
+            # 1. Proximity: Độ rũ nhỏ hơn hoặc bằng giới hạn cho phép đặt Stoploss.
+            # 2. Không đóng cửa dưới Hỗ trợ.
+            # 3. Không đóng cửa ở mức thấp nhất trong ngày (Có râu nến).
+            # 4. Có Volume vào đỡ giá (Chấp nhận đóng cửa dưới 50% thân nến nếu có Vol).
+            if (penetration_pct <= max_penetration and 
+                bar['Close'] >= support_low and 
+                bar['Close_Pos'] >= 0.1 and 
+                bar['Volume'] > df['Vol_MA20'].iloc[current_loc]):
+                
+                signal, poe, sl = "🔥 Spring (Rũ Bỏ)", f"Mua {round(bar['Close'], 2)}", f"Thủng {round(bar['Low'], 2)}"
+                
+        # Dấu hiệu Sức mạnh
         elif bar['Is_Up_Bar'] and bar['Spread'] > bar['Avg_Spread'] * 1.2 and bar['Vol_High'] and bar['Close_Pos'] >= 0.7:
-            signal, poe, sl = "🚀 SOS (Cầu Lớn)", f"Chờ LPS về {round(bar['Close'] - (bar['Spread']*0.3), 2)}", f"Thủng {round(bar['Low'], 2)}"
+            signal, poe, sl = "🚀 SOS (Cầu Lớn)", f"Chờ LPS {round(bar['Close'] - (bar['Spread']*0.3), 2)}", f"Thủng {round(bar['Low'], 2)}"
 
         if signal:
             latest_signal, signal_date, final_poe, final_sl = signal, idx.strftime("%d/%m/%Y"), poe, sl
@@ -129,7 +156,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback):
     }
 
 # ==========================================
-# GIAO DIỆN WEB
+# GIAO DIỆN WEB CÓ TÙY CHỈNH THAM SỐ
 # ==========================================
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -138,6 +165,22 @@ with col2:
     lookback_input = st.number_input("TÌM TÍN HIỆU VSA (Số phiên qua):", min_value=1, value=10, max_value=20)
 with col3:
     uploaded_file = st.file_uploader("Nạp CSV Mã tùy chọn", type=["csv"])
+
+# KHU VỰC TÙY CHỈNH THAM SỐ SPRING (Theo hướng dẫn Video)
+with st.expander("⚙️ Cấu hình Chuyên sâu Điểm nổ VSA (Wyckoff Spring Anatomy)"):
+    scol1, scol2 = st.columns(2)
+    with scol1:
+        spring_lookback_input = st.number_input(
+            "Chu kỳ dò Đáy Hỗ Trợ (Lookback Bars):", 
+            min_value=5, max_value=50, value=15, 
+            help="Số phiên giao dịch để tìm vùng Hỗ trợ (Lowest Low). Mặc định là 15 theo video."
+        )
+    with scol2:
+        max_penetration_input = st.number_input(
+            "Độ rũ tối đa - Proximity Check (%):", 
+            min_value=1.0, max_value=20.0, value=8.0, step=1.0, 
+            help="Khoảng cách % rũ bỏ tối đa. Rũ quá sâu (ví dụ >10%) sẽ làm sai lệch quản trị rủi ro Stoploss."
+        )
 
 if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
     # 1. Chuẩn bị danh sách mã
@@ -154,7 +197,7 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
     if tickers_to_scan:
         start_time = time.time()
         
-        # 2. TẢI DỮ LIỆU HÀNG LOẠT (BATCH DOWNLOAD) - BÍ QUYẾT TỐC ĐỘ
+        # 2. TẢI DỮ LIỆU HÀNG LOẠT (BATCH DOWNLOAD)
         with st.spinner(f"Đang tải dữ liệu hàng loạt cho {len(tickers_to_scan)} mã..."):
             full_data = yf.download(tickers_to_scan, period="2y", group_by='ticker', threads=True, progress=False)
         
@@ -167,13 +210,12 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
         
         for i, t in enumerate(tickers_to_scan):
             try:
-                # Trích xuất dữ liệu của từng mã từ khối dữ liệu lớn đã tải
                 ticker_df = full_data[t]
-                # Loại bỏ các dòng bị lỗi NaN toàn bộ (thường do mã ko tồn tại)
                 ticker_df = ticker_df.dropna(how='all')
                 
                 if not ticker_df.empty:
-                    res = analyze_ticker_data(ticker_df, min_vol_input, lookback_input)
+                    # Truyền các tham số tùy chỉnh Spring vào Hàm lõi
+                    res = analyze_ticker_data(ticker_df, min_vol_input, lookback_input, spring_lookback_input, max_penetration_input)
                     if res:
                         raw_ticker = t.replace(".VN", "")
                         res["Mã"] = raw_ticker
@@ -190,8 +232,7 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
             df_results['SCTR Rank'] = df_results['Total_Score'].rank(pct=True) * 100
             df_results['SCTR Rank'] = df_results['SCTR Rank'].round(1)
             
-            # --- HIỂN THỊ KẾT QUẢ ---
-            st.success(f"Quét hoàn tất {len(df_results)} mã đạt chuẩn. Tổng thời gian xử lý: {round(time.time() - start_time, 2)} giây.")
+            st.success(f"Quét hoàn tất {len(df_results)} mã đạt chuẩn. Tổng thời gian: {round(time.time() - start_time, 2)} giây.")
             
             st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG SỨC MẠNH NGÀNH")
             sector_stats = df_results.groupby('Ngành').agg(SCTR_Avg=('SCTR Rank', 'mean'), Count=('Mã', 'count')).reset_index()
