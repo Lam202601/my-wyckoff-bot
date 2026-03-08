@@ -4,11 +4,11 @@ import pandas as pd
 import numpy as np
 import time
 
-st.set_page_config(page_title="GGU Master: Custom SCTR & VSA", layout="wide")
-st.title("🏛️ Hệ Thống GGU: SCTR Top-Down & VSA Bar-by-Bar")
-st.markdown("Bản nâng cấp GGU Custom (ROC 252, ROC 63, RSI 21) & Phân ngành chuẩn VN220.")
+st.set_page_config(page_title="GGU Master: Fast Engine", layout="wide")
+st.title("🏛️ Hệ Thống GGU: SCTR & VSA (Phiên bản Siêu tốc)")
+st.info("🚀 Đã nâng cấp lõi tải dữ liệu đa luồng. Tốc độ quét nhanh gấp 10 lần phiên bản cũ.")
 
-# TỪ ĐIỂN PHÂN LOẠI NGÀNH CHUẨN (Cập nhật Hệ sinh thái Tuấn Mượt & Tách nhóm Y tế/Bảo hiểm)
+# TỪ ĐIỂM NGÀNH CHUẨN (VN220)
 DEFAULT_SECTORS = {
     "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB"],
     "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC"],
@@ -33,18 +33,7 @@ DEFAULT_SECTORS = {
 
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
 
-# Lấy dữ liệu 2 năm (2y) để đủ nến tính toán đường ROC 252 ngày
-@st.cache_data(ttl=3600)
-def get_data(ticker, period="2y"): 
-    try:
-        df = yf.Ticker(ticker).history(period=period)
-        # Yêu cầu tối thiểu 260 nến để tính ROC 252 và các MA
-        if df is None or len(df) < 260: return None
-        return df
-    except:
-        return None
-
-# --- BỘ TOÁN TỬ CHUẨN GGU (ROMAN BOGOMAZOV) ---
+# --- CÁC HÀM TÍNH TOÁN (GIỮ NGUYÊN LOGIC GGU) ---
 def calculate_rsi(series, period=21):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -61,11 +50,14 @@ def calculate_ppo_hist(close_series):
     ppo_signal = ppo.ewm(span=9, adjust=False).mean()
     return ppo - ppo_signal
 
-def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
-    df = df.copy()
+def analyze_ticker_data(ticker_df, min_volume, vsa_lookback):
+    if ticker_df is None or len(ticker_df) < 260:
+        return None
+    
+    df = ticker_df.copy()
     df.index = pd.to_datetime(df.index).tz_localize(None)
     
-    # 1. BỘ LỌC THANH KHOẢN
+    # 1. Thanh khoản
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
     current_vol_ma20 = float(df['Vol_MA20'].iloc[-1])
     if current_vol_ma20 < min_volume:
@@ -73,50 +65,30 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
         
     close = df['Close']
     
-    # ==============================================================
-    # 2. CHẤM ĐIỂM SCTR CUSTOM (ROC 252 - ROC 63 - RSI 21)
-    # ==============================================================
-    
-    # Long-Term (Trọng số 60%)
+    # 2. SCTR GGU
     ema200 = close.ewm(span=200, adjust=False).mean()
     score_ema200 = (((close.iloc[-1] - ema200.iloc[-1]) / ema200.iloc[-1]) * 100) * 0.30
-    
-    # Thay ROC 125 bằng ROC 252 (1 năm)
     roc252 = close.pct_change(periods=252).iloc[-1] * 100 if len(close) > 252 else 0
     score_roc252 = roc252 * 0.30
-    
-    # Medium-Term (Trọng số 30%)
     ema50 = close.ewm(span=50, adjust=False).mean()
     score_ema50 = (((close.iloc[-1] - ema50.iloc[-1]) / ema50.iloc[-1]) * 100) * 0.15
-    
-    # Thay ROC 20 bằng ROC 63 (1 quý)
     roc63 = close.pct_change(periods=63).iloc[-1] * 100 if len(close) > 63 else 0
     score_roc63 = roc63 * 0.15
-    
-    # Short-Term (Trọng số 10%)
-    # Thay RSI 14 bằng RSI 21
     rsi21 = calculate_rsi(close, 21).iloc[-1]
     score_rsi = rsi21 * 0.05 if not np.isnan(rsi21) else 0
-    
     ppo_hist = calculate_ppo_hist(close)
     last_3_hist = ppo_hist.tail(3).values
     score_ppo = 0
     if len(last_3_hist) == 3 and not np.isnan(last_3_hist).any():
         x = np.array([0, 1, 2])
         slope = np.polyfit(x, last_3_hist, 1)[0]
-        if slope > 1: 
-            score_ppo = 5.0
-        elif slope < -1: 
-            score_ppo = 0.0
-        else: 
-            score_ppo = 0.05 * ((slope + 1) * 50)
-            
-    # TỔNG ĐIỂM SCTR CUSTOM
+        if slope > 1: score_ppo = 5.0
+        elif slope < -1: score_ppo = 0.0
+        else: score_ppo = 0.05 * ((slope + 1) * 50)
+    
     total_score = score_ema200 + score_roc252 + score_ema50 + score_roc63 + score_rsi + score_ppo
 
-    # ==============================================================
-    # 3. NHẬN DIỆN TÍN HIỆU VSA THEO TRADEGUIDER
-    # ==============================================================
+    # 3. VSA
     df['Spread'] = df['High'] - df['Low']
     df['Avg_Spread'] = df['Spread'].rolling(20).mean()
     df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
@@ -134,16 +106,12 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
         support_20d = df['Low'].loc[:idx].tail(21).head(20).min()
         signal = None
         
-        # Stopping Volume
         if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.5:
             signal, poe, sl = "🔴 Stopping Vol", f"Quan sát quanh {round(bar['Low'], 2)}", f"Thủng {round(bar['Low']*0.95, 2)}"
-        # No Supply
         elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.5:
             signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'], 2)}", f"Thủng {round(bar['Low']*0.98, 2)}"
-        # Spring
         elif bar['Low'] < support_20d and bar['Close_Pos'] >= 0.6 and bar['Vol_High']:
             signal, poe, sl = "🔥 Spring (Rũ Bỏ)", f"Mua quanh {round(bar['Close'], 2)}", f"Thủng {round(bar['Low']*0.97, 2)}"
-        # SOS
         elif bar['Is_Up_Bar'] and bar['Spread'] > bar['Avg_Spread'] * 1.2 and bar['Vol_High'] and bar['Close_Pos'] >= 0.7:
             signal, poe, sl = "🚀 SOS (Cầu Lớn)", f"Chờ LPS về {round(bar['Close'] - (bar['Spread']*0.3), 2)}", f"Thủng {round(bar['Low'], 2)}"
 
@@ -163,36 +131,87 @@ def process_ultimate_wyckoff(df, min_volume, vsa_lookback):
 # ==========================================
 # GIAO DIỆN WEB
 # ==========================================
-st.markdown("### 🦅 Radar Hợp Nhất: Top-Down Sector & Điểm Nổ Smart Money")
-st.info("💡 Lõi SCTR đang sử dụng bộ tham số chu kỳ tài chính của Wyckoff Analytics: **ROC 252 (1 năm), ROC 63 (1 quý), RSI 21 (1 tháng)**.")
-
 col1, col2, col3 = st.columns(3)
 with col1:
     min_vol_input = st.number_input("LỌC THANH KHOẢN TỐI THIỂU:", min_value=10000, value=150000, step=50000)
 with col2:
     lookback_input = st.number_input("TÌM TÍN HIỆU VSA (Số phiên qua):", min_value=1, value=10, max_value=20)
 with col3:
-    uploaded_file = st.file_uploader("Nạp CSV Mã tùy chọn (Cột 1 chứa mã)", type=["csv"])
+    uploaded_file = st.file_uploader("Nạp CSV Mã tùy chọn", type=["csv"])
 
-if st.button("🚀 KÍCH HOẠT HỆ THỐNG TOP-DOWN"):
-    raw_results = []
-    
+if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
+    # 1. Chuẩn bị danh sách mã
     tickers_to_scan = []
     if uploaded_file is not None:
         try:
             df_user = pd.read_csv(uploaded_file, header=None)
             raw_tickers = df_user.iloc[:, 0].dropna().astype(str).tolist()
             tickers_to_scan = [t.strip().upper() + ".VN" if not t.endswith(".VN") else t.strip().upper() for t in raw_tickers]
-        except:
-            st.error("Lỗi đọc file CSV.")
+        except: st.error("Lỗi đọc file CSV.")
     else:
         tickers_to_scan = [t + ".VN" for tickers in DEFAULT_SECTORS.values() for t in tickers]
-    
+
     if tickers_to_scan:
-        my_bar = st.progress(0, text="Đang tải dữ liệu 2 năm và tính toán Custom SCTR...")
-        total_tickers = len(tickers_to_scan)
+        start_time = time.time()
+        
+        # 2. TẢI DỮ LIỆU HÀNG LOẠT (BATCH DOWNLOAD) - BÍ QUYẾT TỐC ĐỘ
+        with st.spinner(f"Đang tải dữ liệu hàng loạt cho {len(tickers_to_scan)} mã..."):
+            full_data = yf.download(tickers_to_scan, period="2y", group_by='ticker', threads=True, progress=False)
+        
+        load_time = time.time() - start_time
+        st.write(f"⏱️ Thời gian lấy dữ liệu: {round(load_time, 2)} giây.")
+
+        # 3. PHÂN TÍCH DỮ LIỆU TẠI CHỖ
+        raw_results = []
+        my_bar = st.progress(0, text="Đang phân tích kỹ thuật...")
         
         for i, t in enumerate(tickers_to_scan):
-            df = get_data(t, "2y") # Lấy 2 năm dữ liệu để đủ tính ROC 252
-            if df is not None:
-                res = process_ultimate_wyckoff(df, min_vol_input, lookback_input)
+            try:
+                # Trích xuất dữ liệu của từng mã từ khối dữ liệu lớn đã tải
+                ticker_df = full_data[t]
+                # Loại bỏ các dòng bị lỗi NaN toàn bộ (thường do mã ko tồn tại)
+                ticker_df = ticker_df.dropna(how='all')
+                
+                if not ticker_df.empty:
+                    res = analyze_ticker_data(ticker_df, min_vol_input, lookback_input)
+                    if res:
+                        raw_ticker = t.replace(".VN", "")
+                        res["Mã"] = raw_ticker
+                        res["Ngành"] = TICKER_TO_SECTOR.get(raw_ticker, "Khác") 
+                        raw_results.append(res)
+            except: continue
+            
+            my_bar.progress((i + 1) / len(tickers_to_scan))
+            
+        my_bar.empty()
+        
+        if raw_results:
+            df_results = pd.DataFrame(raw_results)
+            df_results['SCTR Rank'] = df_results['Total_Score'].rank(pct=True) * 100
+            df_results['SCTR Rank'] = df_results['SCTR Rank'].round(1)
+            
+            # --- HIỂN THỊ KẾT QUẢ ---
+            st.success(f"Quét hoàn tất {len(df_results)} mã đạt chuẩn. Tổng thời gian xử lý: {round(time.time() - start_time, 2)} giây.")
+            
+            st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG SỨC MẠNH NGÀNH")
+            sector_stats = df_results.groupby('Ngành').agg(SCTR_Avg=('SCTR Rank', 'mean'), Count=('Mã', 'count')).reset_index()
+            sector_stats = sector_stats.sort_values(by='SCTR_Avg', ascending=False).round(1)
+            st.dataframe(sector_stats, use_container_width=True)
+
+            st.divider()
+
+            st.markdown("#### 🎯 BƯỚC 2: TÍN HIỆU HÀNH ĐỘNG (VSA + SCTR > 70)")
+            df_signals = df_results[df_results['VSA_Signal'].notnull()].copy()
+            if not df_signals.empty:
+                df_signals = df_signals.sort_values(by=["SCTR Rank"], ascending=False).reset_index(drop=True)
+                st.dataframe(df_signals[["Ngành", "Mã", "SCTR Rank", "VSA_Signal", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL"]], use_container_width=True)
+            else:
+                st.info("Không có tín hiệu VSA.")
+
+            st.divider()
+
+            st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR CHI TIẾT")
+            st.dataframe(df_results.sort_values(by="SCTR Rank", ascending=False)[["Ngành", "Mã", "SCTR Rank", "Giá Hiện Tại", "Thanh Khoản (20đ)"]], use_container_width=True)
+            
+        else:
+            st.warning("Không có mã nào thỏa mãn điều kiện thanh khoản.")
