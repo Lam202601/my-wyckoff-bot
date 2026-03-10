@@ -5,9 +5,9 @@ import numpy as np
 import time
 import datetime
 
-st.set_page_config(page_title="GGU Master V21: Hank Pruden's Logic", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bản Hoàn Thiện Logic (V21)")
-st.markdown("Cập nhật cơ chế Tracking Crossover liên tục & Đếm ngược xác nhận Trend Dài Hạn.")
+st.set_page_config(page_title="GGU Master V22: Clean Engine", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Bản Hoàn Thiện (V22)")
+st.markdown("Đã tối ưu định dạng số liệu, cập nhật sàn giao dịch và chốt Logic Crossover Hank Pruden.")
 
 # TỪ ĐIỂN NGÀNH CHUẨN (264 MÃ TOÀN DIỆN)
 DEFAULT_SECTORS = {
@@ -34,7 +34,8 @@ DEFAULT_SECTORS = {
 }
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
 
-UPCOM_TICKERS = {"VGI","FOX","TTN","VNZ","VEA","BSR","OIL","MCH","QNS","ACV","SAS","DDV","VSN","ABB","BVB","KLB","VFS","DSC","PAT","VSF","SCD","SGB","VAB","PGB","SBS","AAS","MH3","TVN","POS","BSL","PGV","VGG","M10","BRR"}
+# BSR và DSC đã lên HOSE, được rút khỏi danh sách UPCoM
+UPCOM_TICKERS = {"VGI","FOX","TTN","VNZ","VEA","OIL","MCH","QNS","ACV","SAS","DDV","VSN","ABB","BVB","KLB","VFS","PAT","VSF","SCD","SGB","VAB","PGB","SBS","AAS","MH3","TVN","POS","BSL","PGV","VGG","M10","BRR"}
 HNX_TICKERS = {"SHS","MBS","BVS","VIG","CEO","IDC","TIG","PVS","PVC","LAS","TAR","HUT","L14","TNG","BAB","EVS","IVS","IDJ","API","CSC","SLS","MST","PTI"}
 
 def get_exchange(ticker):
@@ -91,7 +92,6 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
     if float(df['Vol_MA20'].iloc[-1]) < min_volume: return None
     
-    # Tính trước các Indicator cốt lõi
     df['RSI21'] = calculate_rsi(df['Close'], 21)
     df['ROC252'] = df['Close'].pct_change(periods=252) * 100
     df['ROC63'] = df['Close'].pct_change(periods=63) * 100
@@ -100,31 +100,22 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     score_current = get_sctr_score(df)
     score_past = get_sctr_score(df.iloc[:-10])
     
-    # =========================================================
-    # MODULE: NHẬN DIỆN TREND DÀI HẠN & ENVELOPES 252
-    # =========================================================
+    # --- MODULE: ĐỊNH LƯỢNG TREND & ENVELOPES ---
     current_close = df['Close'].iloc[-1]
     current_ma252 = df['MA252'].iloc[-1]
     current_rsi = df['RSI21'].iloc[-1]
     
-    # 1. Tính độ lệch Envelope (%)
     env_pct = (current_close - current_ma252) / current_ma252 * 100
     
-    # 2. Logic Tracking Chuỗi Crossover Liên Tiếp (Chuẩn Hank Pruden)
-    # Xác định điều kiện: ROC252 > 0 và ROC252 > ROC63
+    # Điều kiện Tracking ROC Crossover
     crossover_condition = (df['ROC252'] > 0) & (df['ROC252'] > df['ROC63'])
-    
     streak = 0
-    # Lặp ngược từ hiện tại về quá khứ để đếm số phiên liên tiếp thỏa mãn
     for val in crossover_condition.iloc[::-1]:
-        if val:
-            streak += 1
-        else:
-            break
+        if val: streak += 1
+        else: break
             
     is_long_term_trend = streak >= 21
     
-    # 3. Kết luận Vị thế Trend (Context)
     trend_context = "➖ Đi ngang / Tích lũy"
     if env_pct <= -10 and current_rsi < 35:
         trend_context = f"🟢 Vùng Đảo Chiều Đáy (Env {env_pct:.1f}%)"
@@ -135,9 +126,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     elif streak > 0 and streak < 21:
         trend_context = f"⏳ Chờ xác nhận Trend (Ngày {streak}/21)"
     
-    # =========================================================
-    # VSA & ĐÁNH GIÁ CẤU TRÚC 63 PHIÊN (1 QUÝ)
-    # =========================================================
+    # --- VSA & ĐÁNH GIÁ CẤU TRÚC (63 PHIÊN) ---
     df['Spread'] = df['High'] - df['Low']
     df['Avg_Spread'] = df['Spread'].rolling(20).mean()
     df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
@@ -185,7 +174,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
                 struct_eval = "📈 Đánh Đẩy giá (Markup)"
 
     return {
-        "Giá Hiện Tại": round(current_close, 2),
+        "Giá Hiện Tại": current_close, # Giữ nguyên dạng số để Streamlit format lại
         "Thanh Khoản (20đ)": f"{int(df['Vol_MA20'].iloc[-1]):,}",
         "Score_Current": score_current,
         "Score_Past": score_past,
@@ -198,7 +187,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     }
 
 # ==========================================
-# GIAO DIỆN WEB
+# GIAO DIỆN WEB CẤU HÌNH CỘT (UI/UX)
 # ==========================================
 current_month = datetime.datetime.now().month
 if current_month in [11, 12, 1]: st.info("🌱 **GIAI ĐOẠN HIỆN TẠI: GOM HÀNG CHỜ KẾT QUẢ NĂM MỚI.** \n*Chiến lược:* Theo dõi dòng tiền gom (Stopping Vol).")
@@ -259,6 +248,13 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
             df_results['SCTR_Rank_Current'] = df_results['Score_Current'].rank(pct=True) * 100
             df_results['SCTR_Rank_Past'] = df_results['Score_Past'].rank(pct=True) * 100
             
+            # --- CẤU HÌNH ĐỊNH DẠNG CHUNG (SẠCH SỐ LẺ) ---
+            # Format: SCTR 1 số lẻ, Giá hiện tại KHÔNG CÓ SỐ LẺ (%.0f) kèm phân cách hàng nghìn
+            col_config_general = {
+                "SCTR": st.column_config.NumberColumn("SCTR", format="%.1f"),
+                "Giá Hiện Tại": st.column_config.NumberColumn("Giá Hiện Tại", format="%.0f")
+            }
+
             # --- BƯỚC 1 ---
             st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH")
             sector_stats = df_results.groupby('Ngành').agg(SCTR_Nay=('SCTR_Rank_Current', 'mean'), SCTR_Cu=('SCTR_Rank_Past', 'mean'), So_Ma=('Mã', 'count')).reset_index()
@@ -297,8 +293,8 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
                     return ''
                 
                 if not df_signals.empty:
-                    styled_signals = df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc', 'Vị thế Trend (MA252)']).format({'SCTR': '{:.1f}'})
-                    st.dataframe(styled_signals, use_container_width=True)
+                    styled_signals = df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc', 'Vị thế Trend (MA252)'])
+                    st.dataframe(styled_signals, use_container_width=True, column_config=col_config_general)
                 else:
                     st.info(f"Ngành '{selected_sector_2}' không có tín hiệu VSA nào.")
             else:
@@ -326,8 +322,9 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
                 return ''
                 
             st.dataframe(
-                df_ranking[cols_rank].style.map(highlight_trend, subset=['Vị thế Trend (MA252)']).format({'SCTR': '{:.1f}'}), 
-                use_container_width=True
+                df_ranking[cols_rank].style.map(highlight_trend, subset=['Vị thế Trend (MA252)']), 
+                use_container_width=True,
+                column_config=col_config_general
             )
             
         else:
