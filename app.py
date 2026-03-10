@@ -5,9 +5,9 @@ import numpy as np
 import time
 import datetime
 
-st.set_page_config(page_title="GGU Master V16: Smart Engine", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Tiền Thương Mại (V16)")
-st.markdown("Tích hợp AI đánh giá Cấu trúc Đủ Nhịp, Động lượng SCTR Ngành và La bàn Chu kỳ.")
+st.set_page_config(page_title="GGU Master V17: Smart Engine", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Tiền Thương Mại (V17)")
+st.markdown("Tích hợp AI đánh giá Cấu trúc Đủ Nhịp, Động lượng SCTR Ngành và La bàn Chu kỳ. (Đã tối ưu UI/UX)")
 
 # TỪ ĐIỂN NGÀNH CHUẨN (VN220)
 DEFAULT_SECTORS = {
@@ -75,7 +75,7 @@ def get_sctr_score(df):
     return score_ema200 + score_roc252 + score_ema50 + score_roc63 + score_rsi + score_ppo
 
 def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, max_penetration):
-    if ticker_df is None or len(ticker_df) < 270: # Cần >=270 nến để tính quá khứ
+    if ticker_df is None or len(ticker_df) < 270: 
         return None
     
     df = ticker_df.copy()
@@ -99,7 +99,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     df['Is_Down_Bar'] = df['Close'] < df['Open']
     df['Is_Up_Bar'] = df['Close'] > df['Open']
     
-    # TÌM TÍN HIỆU CAO TRÀO BÁN TRONG 40 PHIÊN QUÁ KHỨ (Ghi nhớ thị trường)
+    # TÌM TÍN HIỆU CAO TRÀO BÁN TRONG 40 PHIÊN QUÁ KHỨ 
     past_40_days = df.tail(40)
     has_stopping_volume_past = False
     for i in range(len(past_40_days) - vsa_lookback):
@@ -229,9 +229,8 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
             # XẾP HẠNG SCTR HIỆN TẠI VÀ QUÁ KHỨ (10 PHIÊN TRƯỚC)
             df_results['SCTR_Rank_Current'] = df_results['Score_Current'].rank(pct=True) * 100
             df_results['SCTR_Rank_Past'] = df_results['Score_Past'].rank(pct=True) * 100
-            df_results['SCTR_Rank_Current'] = df_results['SCTR_Rank_Current'].round(1)
             
-            # --- MODULE 3: BẢNG XẾP HẠNG & ĐỘNG LƯỢNG NGÀNH ---
+            # --- BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH ---
             st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH (DÒNG TIỀN VĨ MÔ)")
             st.markdown("*So sánh sức mạnh ngành hiện tại so với 2 tuần trước để xem dòng tiền đang luân chuyển đi đâu.*")
             
@@ -240,9 +239,6 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
                 SCTR_Cu=('SCTR_Rank_Past', 'mean'),
                 So_Ma=('Mã', 'count')
             ).reset_index()
-            
-            sector_stats['SCTR_Nay'] = sector_stats['SCTR_Nay'].round(1)
-            sector_stats['SCTR_Cu'] = sector_stats['SCTR_Cu'].round(1)
             
             # Tạo cột Xu Hướng
             def get_trend(row):
@@ -255,7 +251,13 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
             sector_stats = sector_stats.sort_values(by='SCTR_Nay', ascending=False).drop(columns=['SCTR_Cu'])
             sector_stats.rename(columns={'SCTR_Nay': 'Điểm SCTR', 'So_Ma': 'Số lượng mã'}, inplace=True)
             
-            st.dataframe(sector_stats, use_container_width=True)
+            st.dataframe(
+                sector_stats, 
+                use_container_width=True,
+                column_config={
+                    "Điểm SCTR": st.column_config.NumberColumn(format="%.1f")
+                }
+            )
 
             st.divider()
 
@@ -269,14 +271,15 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
                 df_signals.rename(columns={'SCTR_Rank_Current': 'SCTR'}, inplace=True)
                 cols_sig = ["Ngành", "Mã", "SCTR", "VSA_Signal", "Đánh giá Cấu trúc", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL", "Thanh Khoản (20đ)"]
                 
-                # Highlight màu cho Bảng Tín hiệu
+                # Highlight màu và Ép định dạng 1 số thập phân cho SCTR qua Styler
                 def highlight_eval(val):
                     if "Vàng" in str(val): return 'background-color: #d4edda; color: #155724; font-weight: bold'
                     elif "Sớm" in str(val): return 'background-color: #fff3cd; color: #856404'
                     elif "Markup" in str(val): return 'background-color: #cce5ff; color: #004085'
                     return ''
                 
-                st.dataframe(df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc']), use_container_width=True)
+                styled_signals = df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc']).format({'SCTR': '{:.1f}'})
+                st.dataframe(styled_signals, use_container_width=True)
             else:
                 st.info(f"Hiện tại không có mã nào phát tín hiệu VSA trong {lookback_input} ngày qua.")
 
@@ -287,7 +290,14 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
             df_ranking = df_results.sort_values(by="SCTR_Rank_Current", ascending=False).reset_index(drop=True)
             df_ranking.rename(columns={'SCTR_Rank_Current': 'SCTR'}, inplace=True)
             cols_rank = ["Ngành", "Mã", "SCTR", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
-            st.dataframe(df_ranking[cols_rank], use_container_width=True)
+            
+            st.dataframe(
+                df_ranking[cols_rank], 
+                use_container_width=True,
+                column_config={
+                    "SCTR": st.column_config.NumberColumn("SCTR", format="%.1f")
+                }
+            )
             
         else:
             st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
