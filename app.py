@@ -5,35 +5,43 @@ import numpy as np
 import time
 import datetime
 
-st.set_page_config(page_title="GGU Master V17: Smart Engine", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Tiền Thương Mại (V17)")
-st.markdown("Tích hợp AI đánh giá Cấu trúc Đủ Nhịp, Động lượng SCTR Ngành và La bàn Chu kỳ. (Đã tối ưu UI/UX)")
+st.set_page_config(page_title="GGU Master V19: The Ultimate", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Phiên Bản Hoàn Chỉnh (V19)")
+st.markdown("Quy tụ lõi định lượng Custom SCTR, Giải phẫu VSA, Đánh giá Chu kỳ & Lọc Ngành thông minh.")
 
-# TỪ ĐIỂN NGÀNH CHUẨN (VN220)
-# TỪ ĐIỂN NGÀNH CHUẨN (Cập nhật Vét sạch các Ông lớn UPCoM/HNX/HOSE - ~250 mã)
+# TỪ ĐIỂN NGÀNH CHUẨN (Đã mở rộng chính xác 264 mã bao phủ toàn thị trường)
 DEFAULT_SECTORS = {
-    "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB"],
-    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC"],
-    "Bất động sản": ["VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC","DXS","KHG","HDG","SJS","NBB","ITC","QCG","VPI","TDC"],
-    "BĐS Khu công nghiệp": ["KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP","SNZ","SZL","ITA","LHG"],
-    "Công nghệ & Viễn thông": ["FPT","VGI","CTR","CMG","ELC","FOX","TTN","VNZ","ITD","SGT","PIA","FOC"],
-    "Bán lẻ & Đa ngành": ["MWG","PNJ","FRT","DGW","PET","HAX","VEA"], # Đã thêm VEA (UPCoM)
-    "Thép & Sản phẩm thép": ["HPG","HSG","NKG","VGS","SMC","TLH"],
-    "Vật liệu xây dựng": ["HT1","BCC","KSB","DHA","VLB","VCS","PLC","PTB","BMP","NTP","AAA"],
-    "Dầu khí": ["GAS","PVD","PVS","BSR","PLX","OIL","PVC","PSH","PVB"],
-    "Hóa chất & Phân bón": ["DGC","DCM","DPM","CSV","BFC","LAS","DDV","VTZ","PAT"],
-    "Thực phẩm & Đồ uống": ["SAB","VNM","MSN","KDC","MCH","SBT","QNS","VSN","KDF"],
-    "Thủy sản & Nông nghiệp": ["VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM","CMX","MPC","HNG","VSF"],
-    "Vận tải & Logistics": ["GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP","MVN","DXP","TCL","PDN","VTP"],
-    "Hàng không & Du lịch": ["ACV","HVN","VJC","AST","SAS","SCD"], # Nhóm mới toàn ông lớn
-    "Điện, Thiết bị điện & Đa ngành": ["POW","REE","PC1","NT2","GEG","TV2","QTP","HND","BWE","TDM","GEX"],
-    "Xây dựng & Đầu tư công": ["VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII","L14","EVG","VEC","TCD","CTI","HTN"],
-    "Dệt may": ["TNG","VGT","GIL","MSH","STK","TCM"],
-    "Cao su tự nhiên": ["GVR","DRC","DRI","DPR","TRC","CSM"],
-    "Bảo hiểm": ["BVH","BMI","MIG","PVI","VNR"],
-    "Y tế & Dược phẩm": ["DHG","IMP","DVN","TRA","DBD"]
+    "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB","ABB","BVB","SGB","VAB","PGB"],
+    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC","SBS","AAS","EVS","IVS"],
+    "Bất động sản": ["VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC","DXS","KHG","HDG","SJS","NBB","ITC","QCG","VPI","TDC","IDJ","API","NHA","CSC"],
+    "BĐS Khu công nghiệp": ["KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP","SNZ","SZL","ITA","LHG","MH3"],
+    "Công nghệ & Viễn thông": ["FPT","VGI","CTR","CMG","ELC","FOX","TTN","VNZ","ITD","SGT","PIA","FOC","ICT"],
+    "Bán lẻ & Đa ngành": ["MWG","PNJ","FRT","DGW","PET","HAX","VEA","TLG"], 
+    "Thép & Sản phẩm thép": ["HPG","HSG","NKG","VGS","SMC","TLH","TVN","POM"],
+    "Vật liệu xây dựng": ["HT1","BCC","KSB","DHA","VLB","VCS","PLC","PTB","BMP","NTP","AAA","CTI"],
+    "Dầu khí": ["GAS","PVD","PVS","BSR","PLX","OIL","PVC","PSH","PVB","POS","PGC"],
+    "Hóa chất & Phân bón": ["DGC","DCM","DPM","CSV","BFC","LAS","DDV","VTZ","PAT","BSL"],
+    "Thực phẩm & Đồ uống": ["SAB","VNM","MSN","KDC","MCH","SBT","QNS","VSN","KDF","SLS","LSS"],
+    "Thủy sản & Nông nghiệp": ["VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM","CMX","MPC","HNG","VSF","SJF"],
+    "Vận tải & Logistics": ["GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP","MVN","DXP","TCL","PDN","VTP","ILB","STG"],
+    "Hàng không & Du lịch": ["ACV","HVN","VJC","AST","SAS","SCD","SKG"], 
+    "Điện, Thiết bị điện & Đa ngành": ["POW","REE","PC1","NT2","GEG","TV2","QTP","HND","BWE","TDM","GEX","PGV"],
+    "Xây dựng & Đầu tư công": ["VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII","L14","EVG","VEC","TCD","CTI","HTN","MST"],
+    "Dệt may": ["TNG","VGT","GIL","MSH","STK","TCM","VGG","M10"],
+    "Cao su tự nhiên": ["GVR","DRC","DRI","DPR","TRC","CSM","BRR"],
+    "Bảo hiểm": ["BVH","BMI","MIG","PVI","VNR","PTI","BIC"],
+    "Y tế & Dược phẩm": ["DHG","IMP","DVN","TRA","DBD","DCL","JVC"]
 }
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
+
+# Bộ nhận diện Sàn Giao Dịch (Cập nhật full các mã mới)
+UPCOM_TICKERS = {"VGI","FOX","TTN","VNZ","VEA","BSR","OIL","MCH","QNS","ACV","SAS","DDV","VSN","ABB","BVB","KLB","VFS","DSC","PAT","VSF","SCD","SGB","VAB","PGB","SBS","AAS","MH3","TVN","POS","BSL","PGV","VGG","M10","BRR"}
+HNX_TICKERS = {"SHS","MBS","BVS","VIG","CEO","IDC","TIG","PVS","PVC","LAS","TAR","HUT","L14","TNG","BAB","EVS","IVS","IDJ","API","CSC","SLS","MST","PTI"}
+
+def get_exchange(ticker):
+    if ticker in UPCOM_TICKERS: return "UPCoM"
+    if ticker in HNX_TICKERS: return "HNX"
+    return "HOSE" 
 
 # --- THUẬT TOÁN TÍNH SCTR GGU ---
 def calculate_rsi(series, period=21):
@@ -77,22 +85,18 @@ def get_sctr_score(df):
     return score_ema200 + score_roc252 + score_ema50 + score_roc63 + score_rsi + score_ppo
 
 def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, max_penetration):
-    if ticker_df is None or len(ticker_df) < 270: 
-        return None
+    if ticker_df is None or len(ticker_df) < 270: return None
     
     df = ticker_df.copy()
     df.index = pd.to_datetime(df.index).tz_localize(None)
     
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
     current_vol_ma20 = float(df['Vol_MA20'].iloc[-1])
-    if current_vol_ma20 < min_volume:
-        return None
+    if current_vol_ma20 < min_volume: return None
     
-    # Tính SCTR Hiện tại và 10 Phiên trước
     score_current = get_sctr_score(df)
     score_past = get_sctr_score(df.iloc[:-10])
     
-    # VSA & SPRING ANATOMY
     df['Spread'] = df['High'] - df['Low']
     df['Avg_Spread'] = df['Spread'].rolling(20).mean()
     df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
@@ -101,11 +105,10 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     df['Is_Down_Bar'] = df['Close'] < df['Open']
     df['Is_Up_Bar'] = df['Close'] > df['Open']
     
-    # TÌM TÍN HIỆU CAO TRÀO BÁN TRONG 40 PHIÊN QUÁ KHỨ 
-    past_40_days = df.tail(40)
+    past_63_days = df.tail(63)
     has_stopping_volume_past = False
-    for i in range(len(past_40_days) - vsa_lookback):
-        bar = past_40_days.iloc[i]
+    for i in range(len(past_63_days) - vsa_lookback):
+        bar = past_63_days.iloc[i]
         if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.4:
             has_stopping_volume_past = True
             break
@@ -134,13 +137,8 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
 
         if signal:
             latest_signal, signal_date, poe, sl = signal, idx.strftime("%d/%m/%Y"), poe, sl
-            
-            # MODULE 2: ĐÁNH GIÁ CẤU TRÚC ĐỦ NHỊP
             if signal in ["🟢 No Supply", "🔥 Spring"]:
-                if has_stopping_volume_past:
-                    struct_eval = "🌟 Mua Vàng (Đã rũ SC)"
-                else:
-                    struct_eval = "⏳ Sớm (Chưa có SC)"
+                struct_eval = "🌟 Mua Vàng (Đã rũ SC)" if has_stopping_volume_past else "⏳ Sớm (Chưa có SC)"
             elif signal == "🔴 Stopping Vol":
                 struct_eval = "👀 Watchlist (Đợi Test đáy)"
             elif signal == "🚀 SOS":
@@ -159,39 +157,26 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     }
 
 # ==========================================
-# MODULE 1: LA BÀN CHU KỲ (SEASONALITY COMPASS)
+# GIAO DIỆN WEB
 # ==========================================
 current_month = datetime.datetime.now().month
-if current_month in [11, 12, 1]:
-    st.info("🌱 **GIAI ĐOẠN HIỆN TẠI: GOM HÀNG CHỜ KẾT QUẢ NĂM MỚI.** \n*Chiến lược:* Theo dõi dòng tiền gom (Stopping Vol). Tích lũy vị thế.")
-elif current_month in [2, 3, 4]:
-    st.success("🔥 **GIAI ĐOẠN HIỆN TẠI: SÓNG KỲ VỌNG (BCTC & ĐHCĐ).** \n*Chiến lược:* TẤN CÔNG. Mua mạnh khi có Spring/SOS tại nhóm SCTR > 75.")
-elif current_month == 5:
-    st.error("⚠️ **GIAI ĐOẠN HIỆN TẠI: VÙNG TẠO ĐỈNH (Sell in May).** \n*Chiến lược:* PHÒNG THỦ. Hạ tỷ trọng, cẩn thận Bulltrap. Chú ý SCTR Ngành gãy đổ.")
-elif current_month in [6, 7]:
-    st.info("📉 **GIAI ĐOẠN HIỆN TẠI: VÙNG TRŨNG THÔNG TIN.** \n*Chiến lược:* Kiên nhẫn chờ thị trường rơi đủ sóng (Đợi Phase C). Không vội bắt dao rơi.")
-else:
-    st.success("🌊 **GIAI ĐOẠN HIỆN TẠI: SÓNG KẾT QUẢ KINH DOANH Q3.** \n*Chiến lược:* Lọc các mã SCTR dẫn đầu, tìm điểm nổ No Supply/SOS.")
+if current_month in [11, 12, 1]: st.info("🌱 **GIAI ĐOẠN HIỆN TẠI: GOM HÀNG CHỜ KẾT QUẢ NĂM MỚI.** \n*Chiến lược:* Theo dõi dòng tiền gom (Stopping Vol).")
+elif current_month in [2, 3, 4]: st.success("🔥 **GIAI ĐOẠN HIỆN TẠI: SÓNG KỲ VỌNG (BCTC & ĐHCĐ).** \n*Chiến lược:* TẤN CÔNG. Mua mạnh khi có Spring/SOS.")
+elif current_month == 5: st.error("⚠️ **GIAI ĐOẠN HIỆN TẠI: VÙNG TẠO ĐỈNH (Sell in May).** \n*Chiến lược:* PHÒNG THỦ. Hạ tỷ trọng, cẩn thận Bulltrap.")
+elif current_month in [6, 7]: st.info("📉 **GIAI ĐOẠN HIỆN TẠI: VÙNG TRŨNG THÔNG TIN.** \n*Chiến lược:* Kiên nhẫn chờ thị trường rơi đủ sóng. Không vội bắt dao rơi.")
+else: st.success("🌊 **GIAI ĐOẠN HIỆN TẠI: SÓNG KẾT QUẢ KINH DOANH Q3.** \n*Chiến lược:* Lọc các mã SCTR dẫn đầu, tìm điểm nổ No Supply/SOS.")
 
 st.divider()
 
-# ==========================================
-# GIAO DIỆN WEB CÓ TÙY CHỈNH THAM SỐ
-# ==========================================
 col1, col2, col3 = st.columns(3)
-with col1:
-    min_vol_input = st.number_input("LỌC THANH KHOẢN TỐI THIỂU:", min_value=10000, value=150000, step=50000)
-with col2:
-    lookback_input = st.number_input("TÌM TÍN HIỆU VSA (Số phiên qua):", min_value=1, value=5, max_value=20)
-with col3:
-    uploaded_file = st.file_uploader("Nạp CSV Mã tùy chọn", type=["csv"])
+with col1: min_vol_input = st.number_input("LỌC THANH KHOẢN TỐI THIỂU:", min_value=10000, value=150000, step=50000)
+with col2: lookback_input = st.number_input("TÌM TÍN HIỆU VSA (Số phiên qua):", min_value=1, value=5, max_value=20)
+with col3: uploaded_file = st.file_uploader("Nạp CSV Mã tùy chọn", type=["csv"])
 
-with st.expander("⚙️ Tùy chỉnh Giải phẫu nến Spring (Wyckoff Anatomy)"):
+with st.expander("⚙️ Tùy chỉnh Giải phẫu nến Spring"):
     scol1, scol2 = st.columns(2)
-    with scol1:
-        spring_lookback_input = st.number_input("Chu kỳ dò Hỗ Trợ (Lookback):", value=15)
-    with scol2:
-        max_penetration_input = st.number_input("Độ rũ tối đa - Proximity (%):", value=8.0)
+    with scol1: spring_lookback_input = st.number_input("Chu kỳ dò Hỗ Trợ (Lookback):", value=15)
+    with scol2: max_penetration_input = st.number_input("Độ rũ tối đa - Proximity (%):", value=8.0)
 
 if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
     tickers_to_scan = []
@@ -206,7 +191,7 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
 
     if tickers_to_scan:
         start_time = time.time()
-        with st.spinner(f"Đang tải siêu tốc kho dữ liệu 2 năm cho {len(tickers_to_scan)} mã..."):
+        with st.spinner(f"Đang tải siêu tốc kho dữ liệu cho {len(tickers_to_scan)} mã..."):
             full_data = yf.download(tickers_to_scan, period="2y", group_by='ticker', threads=True, progress=False)
         
         raw_results = []
@@ -218,7 +203,10 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
                 if not ticker_df.empty:
                     res = analyze_ticker_data(ticker_df, min_vol_input, lookback_input, spring_lookback_input, max_penetration_input)
                     if res:
-                        res["Mã"], res["Ngành"] = t.replace(".VN", ""), TICKER_TO_SECTOR.get(t.replace(".VN", ""), "Khác")
+                        raw_ticker = t.replace(".VN", "")
+                        res["Mã"] = raw_ticker
+                        res["Sàn"] = get_exchange(raw_ticker) 
+                        res["Ngành"] = TICKER_TO_SECTOR.get(raw_ticker, "Khác")
                         raw_results.append(res)
             except: continue
             my_bar.progress((i + 1) / len(tickers_to_scan))
@@ -227,78 +215,70 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
         
         if raw_results:
             df_results = pd.DataFrame(raw_results)
-            
-            # XẾP HẠNG SCTR HIỆN TẠI VÀ QUÁ KHỨ (10 PHIÊN TRƯỚC)
             df_results['SCTR_Rank_Current'] = df_results['Score_Current'].rank(pct=True) * 100
             df_results['SCTR_Rank_Past'] = df_results['Score_Past'].rank(pct=True) * 100
             
-            # --- BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH ---
-            st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH (DÒNG TIỀN VĨ MÔ)")
-            st.markdown("*So sánh sức mạnh ngành hiện tại so với 2 tuần trước để xem dòng tiền đang luân chuyển đi đâu.*")
-            
-            sector_stats = df_results.groupby('Ngành').agg(
-                SCTR_Nay=('SCTR_Rank_Current', 'mean'),
-                SCTR_Cu=('SCTR_Rank_Past', 'mean'),
-                So_Ma=('Mã', 'count')
-            ).reset_index()
-            
-            # Tạo cột Xu Hướng
+            # --- BƯỚC 1 ---
+            st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH")
+            sector_stats = df_results.groupby('Ngành').agg(SCTR_Nay=('SCTR_Rank_Current', 'mean'), SCTR_Cu=('SCTR_Rank_Past', 'mean'), So_Ma=('Mã', 'count')).reset_index()
             def get_trend(row):
                 diff = row['SCTR_Nay'] - row['SCTR_Cu']
                 if diff > 3: return f"🚀 Tăng (+{diff:.1f})"
                 elif diff < -3: return f"📉 Giảm ({diff:.1f})"
-                else: return "➖ Đi ngang"
-                
-            sector_stats['Xu Hướng (vs 2 tuần trước)'] = sector_stats.apply(get_trend, axis=1)
+                return "➖ Đi ngang"
+            sector_stats['Xu Hướng'] = sector_stats.apply(get_trend, axis=1)
             sector_stats = sector_stats.sort_values(by='SCTR_Nay', ascending=False).drop(columns=['SCTR_Cu'])
             sector_stats.rename(columns={'SCTR_Nay': 'Điểm SCTR', 'So_Ma': 'Số lượng mã'}, inplace=True)
-            
-            st.dataframe(
-                sector_stats, 
-                use_container_width=True,
-                column_config={
-                    "Điểm SCTR": st.column_config.NumberColumn(format="%.1f")
-                }
-            )
+            st.dataframe(sector_stats, use_container_width=True, column_config={"Điểm SCTR": st.column_config.NumberColumn(format="%.1f")})
 
             st.divider()
 
-            # --- BƯỚC 2: TÍN HIỆU HÀNH ĐỘNG KẾT HỢP NGÀNH ---
+            list_nganh = ["Tất cả"] + sorted(df_results['Ngành'].unique().tolist())
+
+            # --- BƯỚC 2 ---
             st.markdown("#### 🎯 BƯỚC 2: TÍN HIỆU VSA & ĐÁNH GIÁ CẤU TRÚC")
-            st.markdown("*Bot tự động nhìn lại 40 phiên trước để đánh giá độ an toàn của điểm mua (Đã rơi đủ sóng hay chưa).*")
+            selected_sector_2 = st.selectbox("🔍 Lọc Tín hiệu theo Ngành:", list_nganh, key="filter_step2")
             
             df_signals = df_results[df_results['VSA_Signal'].notnull()].copy()
             if not df_signals.empty:
+                if selected_sector_2 != "Tất cả":
+                    df_signals = df_signals[df_signals['Ngành'] == selected_sector_2]
+                    
                 df_signals = df_signals.sort_values(by=["SCTR_Rank_Current"], ascending=False).reset_index(drop=True)
                 df_signals.rename(columns={'SCTR_Rank_Current': 'SCTR'}, inplace=True)
-                cols_sig = ["Ngành", "Mã", "SCTR", "VSA_Signal", "Đánh giá Cấu trúc", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL", "Thanh Khoản (20đ)"]
+                cols_sig = ["Ngành", "Mã", "Sàn", "SCTR", "VSA_Signal", "Đánh giá Cấu trúc", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL"]
                 
-                # Highlight màu và Ép định dạng 1 số thập phân cho SCTR qua Styler
                 def highlight_eval(val):
                     if "Vàng" in str(val): return 'background-color: #d4edda; color: #155724; font-weight: bold'
                     elif "Sớm" in str(val): return 'background-color: #fff3cd; color: #856404'
                     elif "Markup" in str(val): return 'background-color: #cce5ff; color: #004085'
                     return ''
                 
-                styled_signals = df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc']).format({'SCTR': '{:.1f}'})
-                st.dataframe(styled_signals, use_container_width=True)
+                if not df_signals.empty:
+                    styled_signals = df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc']).format({'SCTR': '{:.1f}'})
+                    st.dataframe(styled_signals, use_container_width=True)
+                else:
+                    st.info(f"Ngành '{selected_sector_2}' không có tín hiệu VSA nào trong {lookback_input} ngày qua.")
             else:
-                st.info(f"Hiện tại không có mã nào phát tín hiệu VSA trong {lookback_input} ngày qua.")
+                st.info("Hiện tại không có mã nào phát tín hiệu VSA.")
 
             st.divider()
 
-            # --- BƯỚC 3: XẾP HẠNG SCTR TOÀN THỊ TRƯỜNG ---
-            st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR CHI TIẾT (VN220)")
+            # --- BƯỚC 3 ---
+            st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR CHI TIẾT")
+            selected_sector_3 = st.selectbox("🔍 Xem danh sách theo Ngành:", list_nganh, key="filter_step3")
+            
             df_ranking = df_results.sort_values(by="SCTR_Rank_Current", ascending=False).reset_index(drop=True)
+            if selected_sector_3 != "Tất cả":
+                df_ranking = df_ranking[df_ranking['Ngành'] == selected_sector_3]
+                
             df_ranking.rename(columns={'SCTR_Rank_Current': 'SCTR'}, inplace=True)
-            cols_rank = ["Ngành", "Mã", "SCTR", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
+            cols_rank = ["Ngành", "Mã", "Sàn", "SCTR", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
             
             st.dataframe(
                 df_ranking[cols_rank], 
                 use_container_width=True,
-                column_config={
-                    "SCTR": st.column_config.NumberColumn("SCTR", format="%.1f")
-                }
+                column_config={"SCTR": st.column_config.NumberColumn("SCTR", format="%.1f")}
             )
             
         else:
