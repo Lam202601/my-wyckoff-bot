@@ -4,10 +4,11 @@ import pandas as pd
 import numpy as np
 import time
 import datetime
+import io
 
-st.set_page_config(page_title="GGU Master V25: Cloud Stable", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bản Cloud Ổn Định (V25)")
-st.markdown("Sử dụng lõi dữ liệu Toàn cầu (Yahoo Finance) chống chặn IP. Tích hợp AI Hank Pruden.")
+st.set_page_config(page_title="GGU Master V29: Fort Knox", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Bản Bảo Mật Tối Đa (V29)")
+st.markdown("Xuất file định dạng Excel (.xlsx) tương thích hoàn hảo 100% với Google Sheets. Bảo mật tuyệt đối dữ liệu cá nhân.")
 
 # TỪ ĐIỂN NGÀNH CHUẨN (264 MÃ TOÀN DIỆN)
 DEFAULT_SECTORS = {
@@ -183,14 +184,32 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     }
 
 # ==========================================
-# GIAO DIỆN WEB CẤU HÌNH CỘT (UI/UX)
+# KHỞI TẠO BỘ NHỚ (SESSION STATE)
+# ==========================================
+if 'app_data' not in st.session_state:
+    st.session_state.app_data = None
+if 'scan_time' not in st.session_state:
+    st.session_state.scan_time = 0
+if 'last_update_time' not in st.session_state:
+    st.session_state.last_update_time = ""
+
+# --- HÀM XUẤT FILE EXCEL (.xlsx) BẢO MẬT TRÊN TRÌNH DUYỆT ---
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='GGU_Master_Data')
+    processed_data = output.getvalue()
+    return processed_data
+
+# ==========================================
+# GIAO DIỆN WEB
 # ==========================================
 current_month = datetime.datetime.now().month
-if current_month in [11, 12, 1]: st.info("🌱 **GIAI ĐOẠN HIỆN TẠI: GOM HÀNG CHỜ KẾT QUẢ NĂM MỚI.** \n*Chiến lược:* Theo dõi dòng tiền gom (Stopping Vol).")
-elif current_month in [2, 3, 4]: st.success("🔥 **GIAI ĐOẠN HIỆN TẠI: SÓNG KỲ VỌNG (BCTC & ĐHCĐ).** \n*Chiến lược:* TẤN CÔNG. Mua mạnh khi có Spring/SOS.")
-elif current_month == 5: st.error("⚠️ **GIAI ĐOẠN HIỆN TẠI: VÙNG TẠO ĐỈNH (Sell in May).** \n*Chiến lược:* PHÒNG THỦ. Hạ tỷ trọng, cẩn thận Bulltrap.")
-elif current_month in [6, 7]: st.info("📉 **GIAI ĐOẠN HIỆN TẠI: VÙNG TRŨNG THÔNG TIN.** \n*Chiến lược:* Kiên nhẫn chờ thị trường rơi đủ sóng. Không vội bắt dao rơi.")
-else: st.success("🌊 **GIAI ĐOẠN HIỆN TẠI: SÓNG KẾT QUẢ KINH DOANH Q3.** \n*Chiến lược:* Lọc các mã SCTR dẫn đầu, tìm điểm nổ No Supply/SOS.")
+if current_month in [11, 12, 1]: st.info("🌱 **GIAI ĐOẠN HIỆN TẠI: GOM HÀNG CHỜ KẾT QUẢ NĂM MỚI.**")
+elif current_month in [2, 3, 4]: st.success("🔥 **GIAI ĐOẠN HIỆN TẠI: SÓNG KỲ VỌNG (BCTC & ĐHCĐ).**")
+elif current_month == 5: st.error("⚠️ **GIAI ĐOẠN HIỆN TẠI: VÙNG TẠO ĐỈNH (Sell in May).**")
+elif current_month in [6, 7]: st.info("📉 **GIAI ĐOẠN HIỆN TẠI: VÙNG TRŨNG THÔNG TIN.**")
+else: st.success("🌊 **GIAI ĐOẠN HIỆN TẠI: SÓNG KẾT QUẢ KINH DOANH Q3.**")
 
 st.divider()
 
@@ -210,18 +229,15 @@ if st.button("🚀 KÍCH HOẠT RADAR CLOUD (YAHOO FINANCE)"):
         try:
             df_user = pd.read_csv(uploaded_file, header=None)
             raw_tickers = df_user.iloc[:, 0].dropna().astype(str).tolist()
-            # Bản Yahoo bắt buộc phải có đuôi .VN
             tickers_to_scan = [t.strip().upper() + ".VN" if not t.endswith(".VN") else t.strip().upper() for t in raw_tickers]
         except: st.error("Lỗi file CSV.")
     else:
-        # Tự động gắn đuôi .VN cho kho mã
         tickers_to_scan = [t + ".VN" for tickers in DEFAULT_SECTORS.values() for t in tickers]
 
     if tickers_to_scan:
         start_time = time.time()
         
         with st.spinner(f"Đang tải dữ liệu toàn cầu cho {len(tickers_to_scan)} mã..."):
-            # Gọi API toàn cầu của Yahoo (Nhanh và không bị chặn)
             full_data = yf.download(tickers_to_scan, period="2y", group_by='ticker', threads=True, progress=False)
         
         my_bar = st.progress(0, text="Đang phân tích Định lượng AI và Cấu trúc VSA...")
@@ -248,84 +264,85 @@ if st.button("🚀 KÍCH HOẠT RADAR CLOUD (YAHOO FINANCE)"):
             df_results['SCTR_Rank_Current'] = df_results['Score_Current'].rank(pct=True) * 100
             df_results['SCTR_Rank_Past'] = df_results['Score_Past'].rank(pct=True) * 100
             
-            col_config_general = {
-                "SCTR": st.column_config.NumberColumn("SCTR", format="%.1f"),
-                "Giá Hiện Tại": st.column_config.NumberColumn("Giá Hiện Tại", format="%.0f") 
-            }
-
-            # --- BƯỚC 1 ---
-            st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH")
-            sector_stats = df_results.groupby('Ngành').agg(SCTR_Nay=('SCTR_Rank_Current', 'mean'), SCTR_Cu=('SCTR_Rank_Past', 'mean'), So_Ma=('Mã', 'count')).reset_index()
-            def get_trend(row):
-                diff = row['SCTR_Nay'] - row['SCTR_Cu']
-                if diff > 3: return f"🚀 Tăng (+{diff:.1f})"
-                elif diff < -3: return f"📉 Giảm ({diff:.1f})"
-                return "➖ Đi ngang"
-            sector_stats['Xu Hướng'] = sector_stats.apply(get_trend, axis=1)
-            sector_stats = sector_stats.sort_values(by='SCTR_Nay', ascending=False).drop(columns=['SCTR_Cu'])
-            sector_stats.rename(columns={'SCTR_Nay': 'Điểm SCTR', 'So_Ma': 'Số lượng mã'}, inplace=True)
-            st.dataframe(sector_stats, use_container_width=True, column_config={"Điểm SCTR": st.column_config.NumberColumn(format="%.1f")})
-
-            st.divider()
-
-            list_nganh = ["Tất cả"] + sorted(df_results['Ngành'].unique().tolist())
-
-            # --- BƯỚC 2 ---
-            st.markdown("#### 🎯 BƯỚC 2: TÍN HIỆU VSA & VỊ THẾ TREND (ĐIỂM NỔ)")
-            selected_sector_2 = st.selectbox("🔍 Lọc Tín hiệu theo Ngành:", list_nganh, key="filter_step2")
-            
-            df_signals = df_results[df_results['VSA_Signal'].notnull()].copy()
-            if not df_signals.empty:
-                if selected_sector_2 != "Tất cả":
-                    df_signals = df_signals[df_signals['Ngành'] == selected_sector_2]
-                    
-                df_signals = df_signals.sort_values(by=["SCTR_Rank_Current"], ascending=False).reset_index(drop=True)
-                df_signals.rename(columns={'SCTR_Rank_Current': 'SCTR'}, inplace=True)
-                cols_sig = ["Ngành", "Mã", "Sàn", "SCTR", "VSA_Signal", "Đánh giá Cấu trúc", "Vị thế Trend (MA252)", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL"]
-                
-                def highlight_eval(val):
-                    val_str = str(val)
-                    if "Vàng" in val_str or "Xác nhận" in val_str: return 'background-color: #d4edda; color: #155724; font-weight: bold'
-                    elif "Sớm" in val_str or "Cảnh báo" in val_str or "Chờ" in val_str: return 'background-color: #fff3cd; color: #856404'
-                    elif "Đáy" in val_str: return 'background-color: #d1ecf1; color: #0c5460; font-weight: bold'
-                    return ''
-                
-                if not df_signals.empty:
-                    styled_signals = df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc', 'Vị thế Trend (MA252)'])
-                    st.dataframe(styled_signals, use_container_width=True, column_config=col_config_general)
-                else:
-                    st.info(f"Ngành '{selected_sector_2}' không có tín hiệu VSA nào.")
-            else:
-                st.info("Hiện tại không có mã nào phát tín hiệu VSA.")
-
-            st.divider()
-
-            # --- BƯỚC 3 ---
-            st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR CHI TIẾT (KẾT HỢP ENVELOPES)")
-            selected_sector_3 = st.selectbox("🔍 Xem danh sách theo Ngành:", list_nganh, key="filter_step3")
-            
-            df_ranking = df_results.sort_values(by="SCTR_Rank_Current", ascending=False).reset_index(drop=True)
-            if selected_sector_3 != "Tất cả":
-                df_ranking = df_ranking[df_ranking['Ngành'] == selected_sector_3]
-                
-            df_ranking.rename(columns={'SCTR_Rank_Current': 'SCTR'}, inplace=True)
-            cols_rank = ["Ngành", "Mã", "Sàn", "SCTR", "Vị thế Trend (MA252)", "Giá Hiện Tại", "Thanh Khoản (20đ)"]
-            
-            def highlight_trend(val):
-                val_str = str(val)
-                if "Trend Dài Hạn" in val_str: return 'color: #155724; font-weight: bold'
-                elif "Đáy" in val_str: return 'color: #004085; font-weight: bold'
-                elif "Chờ" in val_str: return 'color: #856404'
-                elif "Đu đỉnh" in val_str: return 'color: #721c24; font-weight: bold'
-                return ''
-                
-            st.dataframe(
-                df_ranking[cols_rank].style.map(highlight_trend, subset=['Vị thế Trend (MA252)']), 
-                use_container_width=True,
-                column_config=col_config_general
-            )
-            
-            st.success(f"Hoàn tất quét {len(df_results)} mã qua Yahoo Finance trong {round(time.time() - start_time, 1)} giây.")
-            
+            st.session_state.app_data = df_results
+            st.session_state.scan_time = round(time.time() - start_time, 1)
+            st.session_state.last_update_time = datetime.datetime.now().strftime("%H:%M:%S ngày %d/%m/%Y")
         else:
-            st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
+            st.session_state.app_data = pd.DataFrame() 
+
+# ==========================================
+# KHỐI HIỂN THỊ DỮ LIỆU
+# ==========================================
+if st.session_state.app_data is not None:
+    if st.session_state.app_data.empty:
+        st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
+    else:
+        st.info(f"⏱️ **Dữ liệu đang hiển thị được chốt lúc:** {st.session_state.last_update_time} (Thời gian quét: {st.session_state.scan_time}s).")
+        
+        df_results = st.session_state.app_data.copy()
+        
+        col_config_general = {
+            "SCTR": st.column_config.NumberColumn("SCTR", format="%.1f"),
+            "Giá Hiện Tại": st.column_config.NumberColumn("Giá Hiện Tại", format="%.0f") 
+        }
+
+        # --- BƯỚC 1 ---
+        st.markdown("#### 🥇 BƯỚC 1: XẾP HẠNG VÀ ĐỘNG LƯỢNG NGÀNH")
+        sector_stats = df_results.groupby('Ngành').agg(SCTR_Nay=('SCTR_Rank_Current', 'mean'), SCTR_Cu=('SCTR_Rank_Past', 'mean'), So_Ma=('Mã', 'count')).reset_index()
+        def get_trend(row):
+            diff = row['SCTR_Nay'] - row['SCTR_Cu']
+            if diff > 3: return f"🚀 Tăng (+{diff:.1f})"
+            elif diff < -3: return f"📉 Giảm ({diff:.1f})"
+            return "➖ Đi ngang"
+        sector_stats['Xu Hướng'] = sector_stats.apply(get_trend, axis=1)
+        sector_stats = sector_stats.sort_values(by='SCTR_Nay', ascending=False).drop(columns=['SCTR_Cu'])
+        sector_stats.rename(columns={'SCTR_Nay': 'Điểm SCTR', 'So_Ma': 'Số lượng mã'}, inplace=True)
+        st.dataframe(sector_stats, use_container_width=True, column_config={"Điểm SCTR": st.column_config.NumberColumn(format="%.1f")})
+
+        st.divider()
+        list_nganh = ["Tất cả"] + sorted(df_results['Ngành'].unique().tolist())
+
+        # --- BƯỚC 2 ---
+        st.markdown("#### 🎯 BƯỚC 2: TÍN HIỆU VSA & VỊ THẾ TREND (ĐIỂM NỔ)")
+        selected_sector_2 = st.selectbox("🔍 Lọc Tín hiệu theo Ngành:", list_nganh, key="filter_step2")
+        
+        df_signals = df_results[df_results['VSA_Signal'].notnull()].copy()
+        if not df_signals.empty:
+            if selected_sector_2 != "Tất cả":
+                df_signals = df_signals[df_signals['Ngành'] == selected_sector_2]
+                
+            df_signals = df_signals.sort_values(by=["SCTR_Rank_Current"], ascending=False).reset_index(drop=True)
+            df_signals.rename(columns={'SCTR_Rank_Current': 'SCTR'}, inplace=True)
+            cols_sig = ["Ngành", "Mã", "Sàn", "SCTR", "VSA_Signal", "Đánh giá Cấu trúc", "Vị thế Trend (MA252)", "Ngày Tín Hiệu", "Giá Hiện Tại", "POE", "SL"]
+            
+            def highlight_eval(val):
+                val_str = str(val)
+                if "Vàng" in val_str or "Xác nhận" in val_str: return 'background-color: #d4edda; color: #155724; font-weight: bold'
+                elif "Sớm" in val_str or "Cảnh báo" in val_str or "Chờ" in val_str: return 'background-color: #fff3cd; color: #856404'
+                elif "Đáy" in val_str: return 'background-color: #d1ecf1; color: #0c5460; font-weight: bold'
+                return ''
+            
+            if not df_signals.empty:
+                styled_signals = df_signals[cols_sig].style.map(highlight_eval, subset=['Đánh giá Cấu trúc', 'Vị thế Trend (MA252)'])
+                st.dataframe(styled_signals, use_container_width=True, column_config=col_config_general)
+                
+                # Bút bấm xuất thẳng Excel (.xlsx) chuẩn hóa Google Sheets
+                excel_sig = to_excel(df_signals[cols_sig])
+                st.download_button(
+                    label="📥 Tải Bảng Tín Hiệu (Mở bằng Google Sheets/Excel)",
+                    data=excel_sig,
+                    file_name=f"Tin_Hieu_VSA_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.info(f"Ngành '{selected_sector_2}' không có tín hiệu VSA nào.")
+        else:
+            st.info("Hiện tại không có mã nào phát tín hiệu VSA.")
+
+        st.divider()
+
+        # --- BƯỚC 3 ---
+        st.markdown("#### 👑 BƯỚC 3: BẢNG XẾP HẠNG SCTR CHI TIẾT")
+        selected_sector_3 = st.selectbox("🔍 Xem danh sách theo Ngành:", list_nganh, key="filter_step3")
+        
+        df_ranking = df_results.sort_values(by="SCTR
