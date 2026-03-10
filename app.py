@@ -6,9 +6,9 @@ import time
 import datetime
 import io
 
-st.set_page_config(page_title="GGU Master V29: Fort Knox", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bản Bảo Mật Tối Đa (V29)")
-st.markdown("Xuất file định dạng Excel (.xlsx) tương thích hoàn hảo 100% với Google Sheets. Bảo mật tuyệt đối dữ liệu cá nhân.")
+st.set_page_config(page_title="GGU Master V29.1: Fort Knox", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Bản Bảo Mật Tối Đa (V29.1)")
+st.markdown("Xuất file Excel (.xlsx) chuẩn hóa. Code đã bẻ dòng chống lỗi Copy/Paste.")
 
 # TỪ ĐIỂN NGÀNH CHUẨN (264 MÃ TOÀN DIỆN)
 DEFAULT_SECTORS = {
@@ -43,7 +43,6 @@ def get_exchange(ticker):
     if ticker in HNX_TICKERS: return "HNX"
     return "HOSE" 
 
-# --- THUẬT TOÁN TÍNH TOÁN LÕI ---
 def calculate_rsi(series, period=21):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -96,113 +95,3 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     df['ROC252'] = df['Close'].pct_change(periods=252) * 100
     df['ROC63'] = df['Close'].pct_change(periods=63) * 100
     df['MA252'] = df['Close'].rolling(window=252).mean()
-    
-    score_current = get_sctr_score(df)
-    score_past = get_sctr_score(df.iloc[:-10])
-    
-    current_close = float(df['Close'].iloc[-1])
-    current_ma252 = df['MA252'].iloc[-1]
-    current_rsi = df['RSI21'].iloc[-1]
-    
-    env_pct = (current_close - current_ma252) / current_ma252 * 100
-    
-    crossover_condition = (df['ROC252'] > 0) & (df['ROC252'] > df['ROC63'])
-    streak = 0
-    for val in crossover_condition.iloc[::-1]:
-        if val: streak += 1
-        else: break
-            
-    is_long_term_trend = streak >= 21
-    
-    trend_context = "➖ Đi ngang / Tích lũy"
-    if env_pct <= -10 and current_rsi < 35:
-        trend_context = f"🟢 Vùng Đảo Chiều Đáy (Env {env_pct:.1f}%)"
-    elif env_pct >= 30 and current_rsi > 70:
-        trend_context = f"🔴 Cảnh báo Đu đỉnh (Env +{env_pct:.1f}%)"
-    elif is_long_term_trend and current_close > current_ma252:
-        trend_context = "🚀 Tín hiệu vào Trend Dài Hạn"
-    elif streak > 0 and streak < 21:
-        trend_context = f"⏳ Chờ xác nhận Trend (Ngày {streak}/21)"
-    
-    df['Spread'] = df['High'] - df['Low']
-    df['Avg_Spread'] = df['Spread'].rolling(20).mean()
-    df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
-    df['Vol_High'] = df['Volume'] > (df['Vol_MA20'] * 1.2)
-    df['Vol_Less_Than_Prev_2'] = (df['Volume'] < df['Volume'].shift(1)) & (df['Volume'] < df['Volume'].shift(2))
-    df['Is_Down_Bar'] = df['Close'] < df['Open']
-    df['Is_Up_Bar'] = df['Close'] > df['Open']
-    
-    past_63_days = df.tail(63)
-    has_stopping_volume_past = False
-    for i in range(len(past_63_days) - vsa_lookback):
-        if past_63_days.iloc[i]['Is_Down_Bar'] and past_63_days.iloc[i]['Vol_High'] and past_63_days.iloc[i]['Close_Pos'] > 0.4:
-            has_stopping_volume_past = True
-            break
-
-    scan_window = df.tail(vsa_lookback)
-    latest_signal, signal_date, poe, sl, struct_eval = None, "", "", "", ""
-    
-    for i in range(len(scan_window)):
-        idx = scan_window.index[i]
-        bar = scan_window.iloc[i]
-        current_loc = df.index.get_loc(idx)
-        
-        support_low = df['Low'].iloc[max(0, current_loc - spring_lookback) : current_loc].min() if current_loc > 0 else bar['Low']
-        signal = None
-        
-        if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.4:
-            signal, poe, sl = "🔴 Stopping Vol", f"Quan sát {round(bar['Low'])}", f"Thủng {round(bar['Low']*0.95)}"
-        elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.4:
-            signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'])}", f"Thủng {round(bar['Low']*0.98)}"
-        elif bar['Low'] < support_low:
-            penetration_pct = (support_low - bar['Low']) / support_low * 100
-            if (penetration_pct <= max_penetration and bar['Close'] >= support_low and bar['Close_Pos'] >= 0.1 and bar['Volume'] > df['Vol_MA20'].iloc[current_loc]):
-                signal, poe, sl = "🔥 Spring", f"Mua {round(bar['Close'])}", f"Thủng {round(bar['Low'])}"
-        elif bar['Is_Up_Bar'] and bar['Spread'] > bar['Avg_Spread'] * 1.2 and bar['Vol_High'] and bar['Close_Pos'] >= 0.7:
-            signal, poe, sl = "🚀 SOS", f"Chờ LPS {round(bar['Close'] - (bar['Spread']*0.3))}", f"Thủng {round(bar['Low'])}"
-
-        if signal:
-            latest_signal, signal_date, poe, sl = signal, idx.strftime("%d/%m/%Y"), poe, sl
-            if signal in ["🟢 No Supply", "🔥 Spring"]:
-                struct_eval = "🌟 Mua Vàng (Đã rũ SC)" if has_stopping_volume_past else "⏳ Sớm (Chưa có SC)"
-            elif signal == "🔴 Stopping Vol":
-                struct_eval = "👀 Watchlist (Đợi Test đáy)"
-            elif signal == "🚀 SOS":
-                struct_eval = "📈 Đánh Đẩy giá (Markup)"
-
-    return {
-        "Giá Hiện Tại": current_close, 
-        "Thanh Khoản (20đ)": f"{int(df['Vol_MA20'].iloc[-1]):,}",
-        "Score_Current": score_current,
-        "Score_Past": score_past,
-        "VSA_Signal": latest_signal,
-        "Đánh giá Cấu trúc": struct_eval,
-        "Vị thế Trend (MA252)": trend_context,
-        "Ngày Tín Hiệu": signal_date,
-        "POE": poe,
-        "SL": sl
-    }
-
-# ==========================================
-# KHỞI TẠO BỘ NHỚ (SESSION STATE)
-# ==========================================
-if 'app_data' not in st.session_state:
-    st.session_state.app_data = None
-if 'scan_time' not in st.session_state:
-    st.session_state.scan_time = 0
-if 'last_update_time' not in st.session_state:
-    st.session_state.last_update_time = ""
-
-# --- HÀM XUẤT FILE EXCEL (.xlsx) ---
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='GGU_Master_Data')
-    processed_data = output.getvalue()
-    return processed_data
-
-# ==========================================
-# GIAO DIỆN WEB
-# ==========================================
-current_month = datetime.datetime.now().month
-if current_month in [11, 12, 1]: st.info("🌱 **GIAI ĐOẠN HIỆN TẠI: GOM HÀNG CHỜ K
