@@ -1,13 +1,14 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import numpy as np
 import time
 import datetime
+import random
+from vnstock import stock_historical_data
 
-st.set_page_config(page_title="GGU Master V22: Clean Engine", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bản Hoàn Thiện (V22)")
-st.markdown("Đã tối ưu định dạng số liệu, cập nhật sàn giao dịch và chốt Logic Crossover Hank Pruden.")
+st.set_page_config(page_title="GGU Master V24: Stealth Engine", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Bản Tàng Hình (V24)")
+st.markdown("Tích hợp thuật toán giả lập con người để lấy dữ liệu Real-time an toàn trên Cloud.")
 
 # TỪ ĐIỂN NGÀNH CHUẨN (264 MÃ TOÀN DIỆN)
 DEFAULT_SECTORS = {
@@ -34,7 +35,6 @@ DEFAULT_SECTORS = {
 }
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
 
-# BSR và DSC đã lên HOSE, được rút khỏi danh sách UPCoM
 UPCOM_TICKERS = {"VGI","FOX","TTN","VNZ","VEA","OIL","MCH","QNS","ACV","SAS","DDV","VSN","ABB","BVB","KLB","VFS","PAT","VSF","SCD","SGB","VAB","PGB","SBS","AAS","MH3","TVN","POS","BSL","PGV","VGG","M10","BRR"}
 HNX_TICKERS = {"SHS","MBS","BVS","VIG","CEO","IDC","TIG","PVS","PVC","LAS","TAR","HUT","L14","TNG","BAB","EVS","IVS","IDJ","API","CSC","SLS","MST","PTI"}
 
@@ -43,7 +43,34 @@ def get_exchange(ticker):
     if ticker in HNX_TICKERS: return "HNX"
     return "HOSE" 
 
-# --- THUẬT TOÁN TÍNH TOÁN LÕI ---
+# --- HÀM TẢI DỮ LIỆU TÀNG HÌNH (STEALTH MODE) ---
+# Trí nhớ 30 phút. Bạn load lại web không lo bị lấy dữ liệu lại.
+@st.cache_data(ttl=1800, show_spinner=False) 
+def fetch_all_data_vnstock_stealth(tickers):
+    end_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.datetime.now() - datetime.timedelta(days=730)).strftime('%Y-%m-%d')
+    
+    full_data = {}
+    for t in tickers:
+        try:
+            # Gọi API
+            df = stock_historical_data(symbol=t, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
+            if df is not None and not df.empty:
+                df.set_index('time', inplace=True)
+                df.index = pd.to_datetime(df.index)
+                df.rename(columns={'open':'Open', 'high':'High', 'low':'Low', 'close':'Close', 'volume':'Volume'}, inplace=True)
+                for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                df = df.sort_index()
+                full_data[t] = df
+        except Exception:
+            pass # Nếu bị chặn 1 mã, âm thầm lướt qua để cứu cả hệ thống
+        
+        # Lớp ngụy trang: Nghỉ ngẫu nhiên từ 0.1s đến 0.4s
+        time.sleep(random.uniform(0.1, 0.4)) 
+    return full_data
+
+# --- THUẬT TOÁN TÍNH TOÁN LÕI (Giữ nguyên siêu logic Hank Pruden) ---
 def calculate_rsi(series, period=21):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -87,7 +114,6 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     if ticker_df is None or len(ticker_df) < 280: return None
     
     df = ticker_df.copy()
-    df.index = pd.to_datetime(df.index).tz_localize(None)
     
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
     if float(df['Vol_MA20'].iloc[-1]) < min_volume: return None
@@ -100,14 +126,12 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     score_current = get_sctr_score(df)
     score_past = get_sctr_score(df.iloc[:-10])
     
-    # --- MODULE: ĐỊNH LƯỢNG TREND & ENVELOPES ---
-    current_close = df['Close'].iloc[-1]
+    current_close = float(df['Close'].iloc[-1])
     current_ma252 = df['MA252'].iloc[-1]
     current_rsi = df['RSI21'].iloc[-1]
     
     env_pct = (current_close - current_ma252) / current_ma252 * 100
     
-    # Điều kiện Tracking ROC Crossover
     crossover_condition = (df['ROC252'] > 0) & (df['ROC252'] > df['ROC63'])
     streak = 0
     for val in crossover_condition.iloc[::-1]:
@@ -126,7 +150,6 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     elif streak > 0 and streak < 21:
         trend_context = f"⏳ Chờ xác nhận Trend (Ngày {streak}/21)"
     
-    # --- VSA & ĐÁNH GIÁ CẤU TRÚC (63 PHIÊN) ---
     df['Spread'] = df['High'] - df['Low']
     df['Avg_Spread'] = df['Spread'].rolling(20).mean()
     df['Close_Pos'] = np.where(df['Spread'] > 0, (df['Close'] - df['Low']) / df['Spread'], 0.5)
@@ -154,15 +177,15 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
         signal = None
         
         if bar['Is_Down_Bar'] and bar['Vol_High'] and bar['Close_Pos'] > 0.4:
-            signal, poe, sl = "🔴 Stopping Vol", f"Quan sát {round(bar['Low'], 2)}", f"Thủng {round(bar['Low']*0.95, 2)}"
+            signal, poe, sl = "🔴 Stopping Vol", f"Quan sát {round(bar['Low'])}", f"Thủng {round(bar['Low']*0.95)}"
         elif bar['Is_Down_Bar'] and bar['Spread'] < bar['Avg_Spread'] and bar['Vol_Less_Than_Prev_2'] and bar['Close_Pos'] >= 0.4:
-            signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'], 2)}", f"Thủng {round(bar['Low']*0.98, 2)}"
+            signal, poe, sl = "🟢 No Supply", f"Mua vượt {round(bar['High'])}", f"Thủng {round(bar['Low']*0.98)}"
         elif bar['Low'] < support_low:
             penetration_pct = (support_low - bar['Low']) / support_low * 100
             if (penetration_pct <= max_penetration and bar['Close'] >= support_low and bar['Close_Pos'] >= 0.1 and bar['Volume'] > df['Vol_MA20'].iloc[current_loc]):
-                signal, poe, sl = "🔥 Spring", f"Mua {round(bar['Close'], 2)}", f"Thủng {round(bar['Low'], 2)}"
+                signal, poe, sl = "🔥 Spring", f"Mua {round(bar['Close'])}", f"Thủng {round(bar['Low'])}"
         elif bar['Is_Up_Bar'] and bar['Spread'] > bar['Avg_Spread'] * 1.2 and bar['Vol_High'] and bar['Close_Pos'] >= 0.7:
-            signal, poe, sl = "🚀 SOS", f"Chờ LPS {round(bar['Close'] - (bar['Spread']*0.3), 2)}", f"Thủng {round(bar['Low'], 2)}"
+            signal, poe, sl = "🚀 SOS", f"Chờ LPS {round(bar['Close'] - (bar['Spread']*0.3))}", f"Thủng {round(bar['Low'])}"
 
         if signal:
             latest_signal, signal_date, poe, sl = signal, idx.strftime("%d/%m/%Y"), poe, sl
@@ -174,7 +197,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
                 struct_eval = "📈 Đánh Đẩy giá (Markup)"
 
     return {
-        "Giá Hiện Tại": current_close, # Giữ nguyên dạng số để Streamlit format lại
+        "Giá Hiện Tại": current_close, 
         "Thanh Khoản (20đ)": f"{int(df['Vol_MA20'].iloc[-1]):,}",
         "Score_Current": score_current,
         "Score_Past": score_past,
@@ -208,38 +231,41 @@ with st.expander("⚙️ Tùy chỉnh Giải phẫu nến Spring"):
     with scol1: spring_lookback_input = st.number_input("Chu kỳ dò Hỗ Trợ (Lookback):", value=15)
     with scol2: max_penetration_input = st.number_input("Độ rũ tối đa - Proximity (%):", value=8.0)
 
-if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
+if st.button("🚀 KÍCH HOẠT RADAR TÀNG HÌNH (VNSTOCK)"):
     tickers_to_scan = []
     if uploaded_file is not None:
         try:
             df_user = pd.read_csv(uploaded_file, header=None)
             raw_tickers = df_user.iloc[:, 0].dropna().astype(str).tolist()
-            tickers_to_scan = [t.strip().upper() + ".VN" if not t.endswith(".VN") else t.strip().upper() for t in raw_tickers]
+            tickers_to_scan = [t.strip().upper().replace(".VN", "") for t in raw_tickers]
         except: st.error("Lỗi file CSV.")
     else:
-        tickers_to_scan = [t + ".VN" for tickers in DEFAULT_SECTORS.values() for t in tickers]
+        tickers_to_scan = [t for tickers in DEFAULT_SECTORS.values() for t in tickers]
 
     if tickers_to_scan:
         start_time = time.time()
-        with st.spinner(f"Đang tải siêu tốc kho dữ liệu cho {len(tickers_to_scan)} mã..."):
-            full_data = yf.download(tickers_to_scan, period="2y", group_by='ticker', threads=True, progress=False)
+        
+        st.warning("🕵️‍♂️ Đang kích hoạt chế độ Stealth. Lần quét đầu tiên sẽ mất khoảng 1-2 phút để ngụy trang tốc độ, vui lòng không tắt trang...")
+        my_bar = st.progress(0, text="Đang cẩn thận lấy dữ liệu...")
+        
+        # Gọi hàm lấy dữ liệu tàng hình
+        full_data = fetch_all_data_vnstock_stealth(tickers_to_scan)
+        
+        my_bar.progress(0.5, text="Đang phân tích Định lượng AI và Cấu trúc VSA...")
         
         raw_results = []
-        my_bar = st.progress(0, text="AI đang phân tích Định lượng và VSA...")
-        
         for i, t in enumerate(tickers_to_scan):
             try:
-                ticker_df = full_data[t].dropna(how='all')
-                if not ticker_df.empty:
+                if t in full_data:
+                    ticker_df = full_data[t]
                     res = analyze_ticker_data(ticker_df, min_vol_input, lookback_input, spring_lookback_input, max_penetration_input)
                     if res:
-                        raw_ticker = t.replace(".VN", "")
-                        res["Mã"] = raw_ticker
-                        res["Sàn"] = get_exchange(raw_ticker) 
-                        res["Ngành"] = TICKER_TO_SECTOR.get(raw_ticker, "Khác")
+                        res["Mã"] = t
+                        res["Sàn"] = get_exchange(t) 
+                        res["Ngành"] = TICKER_TO_SECTOR.get(t, "Khác")
                         raw_results.append(res)
             except: continue
-            my_bar.progress((i + 1) / len(tickers_to_scan))
+            my_bar.progress(0.5 + (i + 1) / (len(tickers_to_scan)*2))
             
         my_bar.empty()
         
@@ -248,11 +274,9 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
             df_results['SCTR_Rank_Current'] = df_results['Score_Current'].rank(pct=True) * 100
             df_results['SCTR_Rank_Past'] = df_results['Score_Past'].rank(pct=True) * 100
             
-            # --- CẤU HÌNH ĐỊNH DẠNG CHUNG (SẠCH SỐ LẺ) ---
-            # Format: SCTR 1 số lẻ, Giá hiện tại KHÔNG CÓ SỐ LẺ (%.0f) kèm phân cách hàng nghìn
             col_config_general = {
                 "SCTR": st.column_config.NumberColumn("SCTR", format="%.1f"),
-                "Giá Hiện Tại": st.column_config.NumberColumn("Giá Hiện Tại", format="%.0f")
+                "Giá Hiện Tại": st.column_config.NumberColumn("Giá Hiện Tại", format="%.0f") 
             }
 
             # --- BƯỚC 1 ---
@@ -327,5 +351,7 @@ if st.button("🚀 KÍCH HOẠT RADAR SIÊU TỐC"):
                 column_config=col_config_general
             )
             
+            st.success(f"Quét thành công {len(df_results)} mã qua API VNStock trong {round(time.time() - start_time, 1)} giây (Dữ liệu đã được lưu đệm 30 phút).")
+            
         else:
-            st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
+            st.error("Không cào được dữ liệu. Có thể Streamlit Cloud đã bị chặn IP (Geo-blocking). Vui lòng dùng lại lõi Yahoo Finance.")
