@@ -1,14 +1,13 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
 import numpy as np
 import time
 import datetime
-import random
-from vnstock import stock_historical_data
 
-st.set_page_config(page_title="GGU Master V24: Stealth Engine", layout="wide")
-st.title("🏛️ Hệ Thống GGU: Bản Tàng Hình (V24)")
-st.markdown("Tích hợp thuật toán giả lập con người để lấy dữ liệu Real-time an toàn trên Cloud.")
+st.set_page_config(page_title="GGU Master V25: Cloud Stable", layout="wide")
+st.title("🏛️ Hệ Thống GGU: Bản Cloud Ổn Định (V25)")
+st.markdown("Sử dụng lõi dữ liệu Toàn cầu (Yahoo Finance) chống chặn IP. Tích hợp AI Hank Pruden.")
 
 # TỪ ĐIỂN NGÀNH CHUẨN (264 MÃ TOÀN DIỆN)
 DEFAULT_SECTORS = {
@@ -43,34 +42,7 @@ def get_exchange(ticker):
     if ticker in HNX_TICKERS: return "HNX"
     return "HOSE" 
 
-# --- HÀM TẢI DỮ LIỆU TÀNG HÌNH (STEALTH MODE) ---
-# Trí nhớ 30 phút. Bạn load lại web không lo bị lấy dữ liệu lại.
-@st.cache_data(ttl=1800, show_spinner=False) 
-def fetch_all_data_vnstock_stealth(tickers):
-    end_date = datetime.datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.datetime.now() - datetime.timedelta(days=730)).strftime('%Y-%m-%d')
-    
-    full_data = {}
-    for t in tickers:
-        try:
-            # Gọi API
-            df = stock_historical_data(symbol=t, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
-            if df is not None and not df.empty:
-                df.set_index('time', inplace=True)
-                df.index = pd.to_datetime(df.index)
-                df.rename(columns={'open':'Open', 'high':'High', 'low':'Low', 'close':'Close', 'volume':'Volume'}, inplace=True)
-                for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-                df = df.sort_index()
-                full_data[t] = df
-        except Exception:
-            pass # Nếu bị chặn 1 mã, âm thầm lướt qua để cứu cả hệ thống
-        
-        # Lớp ngụy trang: Nghỉ ngẫu nhiên từ 0.1s đến 0.4s
-        time.sleep(random.uniform(0.1, 0.4)) 
-    return full_data
-
-# --- THUẬT TOÁN TÍNH TOÁN LÕI (Giữ nguyên siêu logic Hank Pruden) ---
+# --- THUẬT TOÁN TÍNH TOÁN LÕI ---
 def calculate_rsi(series, period=21):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -114,6 +86,7 @@ def analyze_ticker_data(ticker_df, min_volume, vsa_lookback, spring_lookback, ma
     if ticker_df is None or len(ticker_df) < 280: return None
     
     df = ticker_df.copy()
+    df.index = pd.to_datetime(df.index).tz_localize(None)
     
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
     if float(df['Vol_MA20'].iloc[-1]) < min_volume: return None
@@ -231,41 +204,42 @@ with st.expander("⚙️ Tùy chỉnh Giải phẫu nến Spring"):
     with scol1: spring_lookback_input = st.number_input("Chu kỳ dò Hỗ Trợ (Lookback):", value=15)
     with scol2: max_penetration_input = st.number_input("Độ rũ tối đa - Proximity (%):", value=8.0)
 
-if st.button("🚀 KÍCH HOẠT RADAR TÀNG HÌNH (VNSTOCK)"):
+if st.button("🚀 KÍCH HOẠT RADAR CLOUD (YAHOO FINANCE)"):
     tickers_to_scan = []
     if uploaded_file is not None:
         try:
             df_user = pd.read_csv(uploaded_file, header=None)
             raw_tickers = df_user.iloc[:, 0].dropna().astype(str).tolist()
-            tickers_to_scan = [t.strip().upper().replace(".VN", "") for t in raw_tickers]
+            # Bản Yahoo bắt buộc phải có đuôi .VN
+            tickers_to_scan = [t.strip().upper() + ".VN" if not t.endswith(".VN") else t.strip().upper() for t in raw_tickers]
         except: st.error("Lỗi file CSV.")
     else:
-        tickers_to_scan = [t for tickers in DEFAULT_SECTORS.values() for t in tickers]
+        # Tự động gắn đuôi .VN cho kho mã
+        tickers_to_scan = [t + ".VN" for tickers in DEFAULT_SECTORS.values() for t in tickers]
 
     if tickers_to_scan:
         start_time = time.time()
         
-        st.warning("🕵️‍♂️ Đang kích hoạt chế độ Stealth. Lần quét đầu tiên sẽ mất khoảng 1-2 phút để ngụy trang tốc độ, vui lòng không tắt trang...")
-        my_bar = st.progress(0, text="Đang cẩn thận lấy dữ liệu...")
+        with st.spinner(f"Đang tải dữ liệu toàn cầu cho {len(tickers_to_scan)} mã..."):
+            # Gọi API toàn cầu của Yahoo (Nhanh và không bị chặn)
+            full_data = yf.download(tickers_to_scan, period="2y", group_by='ticker', threads=True, progress=False)
         
-        # Gọi hàm lấy dữ liệu tàng hình
-        full_data = fetch_all_data_vnstock_stealth(tickers_to_scan)
-        
-        my_bar.progress(0.5, text="Đang phân tích Định lượng AI và Cấu trúc VSA...")
+        my_bar = st.progress(0, text="Đang phân tích Định lượng AI và Cấu trúc VSA...")
         
         raw_results = []
         for i, t in enumerate(tickers_to_scan):
             try:
-                if t in full_data:
-                    ticker_df = full_data[t]
+                ticker_df = full_data[t].dropna(how='all')
+                if not ticker_df.empty:
                     res = analyze_ticker_data(ticker_df, min_vol_input, lookback_input, spring_lookback_input, max_penetration_input)
                     if res:
-                        res["Mã"] = t
-                        res["Sàn"] = get_exchange(t) 
-                        res["Ngành"] = TICKER_TO_SECTOR.get(t, "Khác")
+                        raw_ticker = t.replace(".VN", "")
+                        res["Mã"] = raw_ticker
+                        res["Sàn"] = get_exchange(raw_ticker) 
+                        res["Ngành"] = TICKER_TO_SECTOR.get(raw_ticker, "Khác")
                         raw_results.append(res)
             except: continue
-            my_bar.progress(0.5 + (i + 1) / (len(tickers_to_scan)*2))
+            my_bar.progress((i + 1) / len(tickers_to_scan))
             
         my_bar.empty()
         
@@ -351,7 +325,7 @@ if st.button("🚀 KÍCH HOẠT RADAR TÀNG HÌNH (VNSTOCK)"):
                 column_config=col_config_general
             )
             
-            st.success(f"Quét thành công {len(df_results)} mã qua API VNStock trong {round(time.time() - start_time, 1)} giây (Dữ liệu đã được lưu đệm 30 phút).")
+            st.success(f"Hoàn tất quét {len(df_results)} mã qua Yahoo Finance trong {round(time.time() - start_time, 1)} giây.")
             
         else:
-            st.error("Không cào được dữ liệu. Có thể Streamlit Cloud đã bị chặn IP (Geo-blocking). Vui lòng dùng lại lõi Yahoo Finance.")
+            st.warning("Không có cổ phiếu nào vượt qua màng lọc thanh khoản.")
