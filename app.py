@@ -28,10 +28,11 @@ def render_seasonality_chart():
     with col_chart:
         st.bar_chart(df_seasonality, color="#1f77b4", height=250)
     with col_text:
-        st.info("💡 **Góc nhìn Định lượng:**\n\n"
-                "- **Vùng rủi ro (Tỷ lệ < 50%):** Tháng 05 (Sell in May), Tháng 10, Tháng 11 (Áp lực chốt NAV/Margin).\n\n"
-                "- **Vùng bùng nổ (Tỷ lệ > 60%):** Tháng 02 (Sóng sau Tết), Tháng 08, Tháng 12.\n\n"
-                "- **Tháng 03-04 hiện tại:** Tỷ lệ 50-53%, là vùng tranh chấp (Shakeout) đón BCTC Q1. Lập tạo thường đạp rũ bỏ trước khi kéo thốc.")
+        st.info("💡 **Góc nhìn Định lượng & Hành vi Tạo lập:**\n\n"
+                "- **Tháng 03 (53% - Rũ bỏ & Gom hàng):** Sau nhịp sóng ngắn đầu năm, Tạo lập thường đè chỉ số, rũ bỏ ép đám đông cắt lỗ để gom hàng giá rẻ.\n\n"
+                "- **Tháng 04 (50% - Đẩy giá/Markup):** Kéo thốc đón sóng Đại hội Cổ đông & BCTC Quý 1. Tin tốt ngập tràn báo đài, F0 hưng phấn FOMO.\n\n"
+                "- **Tháng 05 (42% - Phân phối & Sell in May):** Tin ra là bán. Tạo lập chốt lời úp sọt, thị trường gãy đổ, bước vào vùng trũng thông tin.\n\n"
+                "- **Vùng rủi ro khác:** Tháng 10, Tháng 11 (Áp lực quỹ chốt NAV và CTCK siết Margin).")
 
 render_seasonality_chart()
 st.divider()
