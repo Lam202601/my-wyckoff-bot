@@ -39,7 +39,7 @@ st.divider()
 # TỪ ĐIỂN NGÀNH CHUẨN
 DEFAULT_SECTORS = {
     "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB","ABB","BVB","SGB","VAB","PGB"],
-    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC","SBS","AAS","EVS","TCX',"VCK","BMS","FUEVFVND","IVS"],
+    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC","SBS","AAS","EVS","TCX","VCK","BMS","FUEVFVND","IVS"],
     "Bất động sản": ["VHM","VIC","VRE","VPL","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","AGG","TCH","IJC","CRE","SCR","HQC","DXS","KHG","HDG","SJS","NBB","ITC","QCG","VPI","TDC","IDJ","API","NHA","CSC"],
     "BĐS Khu công nghiệp": ["KBC","IDC","IJC","SZC","VGC","PXL","PHR","BCM","NTC","PTB","SIP","TIG","D2D","TIP","SNZ","SZL","ITA","LHG","GEL","MH3"],
     "Công nghệ & Viễn thông": ["FPT","VGI","CTR","CMG","ELC","FOX","TTN","VNZ","ITD","SGT","PIA","FOC","CMC","VEC","ICT"],
