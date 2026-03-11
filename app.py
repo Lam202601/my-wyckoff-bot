@@ -15,10 +15,10 @@ def render_seasonality_chart():
     st.markdown("### 📊 BỨC TRANH MÙA VỤ VN-INDEX 15 NĂM (SEASONALITY)")
     st.markdown("Xác suất tăng điểm của các tháng trong năm. Sử dụng để định vị rủi ro Vĩ mô trước khi giải ngân.")
     
-    # Dữ liệu thống kê xác suất tăng điểm 15 năm
+    # Đã thêm số 0 để ép máy tính sắp xếp đúng trật tự thời gian (01 -> 12)
     seasonality_data = {
-        "Tháng": ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", 
-                  "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"],
+        "Tháng": ["Tháng 01", "Tháng 02", "Tháng 03", "Tháng 04", "Tháng 05", "Tháng 06", 
+                  "Tháng 07", "Tháng 08", "Tháng 09", "Tháng 10", "Tháng 11", "Tháng 12"],
         "Xác suất Tăng (%)": [58, 65, 53, 50, 42, 48, 55, 62, 51, 45, 40, 60]
     }
     df_seasonality = pd.DataFrame(seasonality_data)
@@ -29,9 +29,9 @@ def render_seasonality_chart():
         st.bar_chart(df_seasonality, color="#1f77b4", height=250)
     with col_text:
         st.info("💡 **Góc nhìn Định lượng:**\n\n"
-                "- **Vùng rủi ro (Tỷ lệ < 50%):** Tháng 5 (Sell in May), Tháng 10, Tháng 11 (Áp lực chốt NAV/Margin).\n\n"
-                "- **Vùng bùng nổ (Tỷ lệ > 60%):** Tháng 2 (Sóng sau Tết), Tháng 8, Tháng 12.\n\n"
-                "- **Tháng 3-4 hiện tại:** Tỷ lệ 50-53%, là vùng tranh chấp (Shakeout) đón BCTC Q1. Lập tạo thường đạp rũ bỏ trước khi kéo thốc.")
+                "- **Vùng rủi ro (Tỷ lệ < 50%):** Tháng 05 (Sell in May), Tháng 10, Tháng 11 (Áp lực chốt NAV/Margin).\n\n"
+                "- **Vùng bùng nổ (Tỷ lệ > 60%):** Tháng 02 (Sóng sau Tết), Tháng 08, Tháng 12.\n\n"
+                "- **Tháng 03-04 hiện tại:** Tỷ lệ 50-53%, là vùng tranh chấp (Shakeout) đón BCTC Q1. Lập tạo thường đạp rũ bỏ trước khi kéo thốc.")
 
 render_seasonality_chart()
 st.divider()
@@ -39,24 +39,25 @@ st.divider()
 # TỪ ĐIỂN NGÀNH CHUẨN
 DEFAULT_SECTORS = {
     "Ngân hàng": ["VCB","BID","CTG","TCB","MBB","STB","VPB","ACB","HDB","VIB","TPB","SHB","MSB","LPB","EIB","OCB","SSB","NAB","BAB","KLB","ABB","BVB","SGB","VAB","PGB"],
-    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC","SBS","AAS","EVS","IVS"],
-    "Bất động sản": ["VHM","VIC","VRE","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","TCH","IJC","CRE","SCR","HQC","DXS","KHG","HDG","SJS","NBB","ITC","QCG","VPI","TDC","IDJ","API","NHA","CSC"],
-    "BĐS Khu công nghiệp": ["KBC","IDC","SZC","VGC","PHR","BCM","NTC","SIP","TIG","D2D","TIP","SNZ","SZL","ITA","LHG","MH3"],
-    "Công nghệ & Viễn thông": ["FPT","VGI","CTR","CMG","ELC","FOX","TTN","VNZ","ITD","SGT","PIA","FOC","ICT"],
-    "Bán lẻ & Đa ngành": ["MWG","PNJ","FRT","DGW","PET","HAX","VEA","TLG"], 
-    "Thép & Sản phẩm thép": ["HPG","HSG","NKG","VGS","SMC","TLH","TVN","POM"],
-    "Vật liệu xây dựng": ["HT1","BCC","KSB","DHA","VLB","VCS","PLC","PTB","BMP","NTP","AAA","CTI"],
-    "Dầu khí": ["GAS","PVD","PVS","BSR","PLX","OIL","PVC","PSH","PVB","POS","PGC"],
-    "Hóa chất & Phân bón": ["DGC","DCM","DPM","CSV","BFC","LAS","DDV","VTZ","PAT","BSL"],
-    "Thực phẩm & Đồ uống": ["SAB","VNM","MSN","KDC","MCH","SBT","QNS","VSN","KDF","SLS","LSS"],
-    "Thủy sản & Nông nghiệp": ["VHC","ANV","IDI","FMC","DBC","HAG","BAF","PAN","TAR","LTG","ASM","CMX","MPC","HNG","VSF","SJF"],
-    "Vận tải & Logistics": ["GMD","HAH","VSC","PVT","VOS","VIP","VTO","PHP","SGP","MVN","DXP","TCL","PDN","VTP","ILB","STG"],
-    "Hàng không & Du lịch": ["ACV","HVN","VJC","AST","SAS","SCD","SKG"], 
-    "Điện, Thiết bị điện & Đa ngành": ["POW","REE","PC1","NT2","GEG","TV2","QTP","HND","BWE","TDM","GEX","PGV"],
-    "Xây dựng & Đầu tư công": ["VCG","HHV","LCG","C4G","HBC","CTD","FCN","HUT","DPG","CII","L14","EVG","VEC","TCD","CTI","HTN","MST"],
+    "Chứng khoán": ["SSI","VND","HCM","VCI","SHS","MBS","FTS","BSI","CTS","AGR","VIX","ORS","VDS","BVS","TCI","TVS","VIG","APG","VFS","DSC","SBS","AAS","EVS","TCX',"VCK","BMS","FUEVFVND","IVS"],
+    "Bất động sản": ["VHM","VIC","VRE","VPL","DXG","DIG","PDR","NLG","NVL","CEO","HDC","KDH","NTL","AGG","TCH","IJC","CRE","SCR","HQC","DXS","KHG","HDG","SJS","NBB","ITC","QCG","VPI","TDC","IDJ","API","NHA","CSC"],
+    "BĐS Khu công nghiệp": ["KBC","IDC","IJC","SZC","VGC","PXL","PHR","BCM","NTC","PTB","SIP","TIG","D2D","TIP","SNZ","SZL","ITA","LHG","GEL","MH3"],
+    "Công nghệ & Viễn thông": ["FPT","VGI","CTR","CMG","ELC","FOX","TTN","VNZ","ITD","SGT","PIA","FOC","CMC","VEC","ICT"],
+    "Bán lẻ & Đa ngành": ["MWG","PNJ","FRT","DGW","PET","HAX","VEA","PLX","PSD","TLG"], 
+    "Thép & Sản phẩm thép": ["HPG","HSG","NKG","VGS","SMC","TLH","TVN","GDA","HGM","KSV","POM"],
+    "Vật liệu xây dựng": ["HT1","BCC","KSB","DHA","VLB","VCS","PLC","BMP","NTP","AAA","KSB","VGC","PTB","FIC","CTI"],
+    "Dầu khí": ["GAS","PVD","PVS","BSR","OIL","PVC","PSH","PVB","POS","PLC","PGC"],
+    "Hóa chất & Phân bón": ["DGC","DCM","DPM","CSV","BFC","LAS","DDV","VTZ","PAT","MSR","MVB","BSL"],
+    "Thực phẩm & Đồ uống": ["SAB","VNM","MSN","KDC","MCH","SBT","QNS","VSN","KDF","SLS","BHN","KDC","NAF","FMC","LSS"],
+    "Thủy sản & Nông nghiệp": ["VHC","ANV","IDI","FMC","DBC","MML","VLC","HAG","BAF","PAN","TAR","ASM","CMX","MPC","DHC","SEA","HNG","VSF","SJF"],
+    "Vận tải & Logistics": ["GMD","HAH","VSC","PVT","VOS","VIP","VTO","PVP","PHP","SGP","MVN","DXP","TCL","PDN","VTP","ILB","CDN","QNP","STG"],
+    "Hàng không & Du lịch": ["ACV","HVN","VJC","AST","SAS","SCD","NCT","SKG"], 
+    "Điện & Nước": ["POW","REE","PC1","NT2","GEG","TV2","QTP","BWE","TDM","HND","DTK","HNA","PGV"], 
+    "Thiết bị điện": ["GEX","GEE","TBD","RAL","PAC","BTH","PHN","VNE","VEC"],
+    "Xây dựng & Đầu tư công": ["VCG","HHV","LCG","C4G","CC1","HBC","CTD","FCN","HUT","DPG","CII","L14","EVG","VEC","TCD","CTI","HTN","MST"],
     "Dệt may": ["TNG","VGT","GIL","MSH","STK","TCM","VGG","M10"],
-    "Cao su tự nhiên": ["GVR","DRC","DRI","DPR","TRC","CSM","BRR"],
-    "Bảo hiểm": ["BVH","BMI","MIG","PVI","VNR","PTI","BIC"],
+    "Cao su tự nhiên": ["GVR","PHR","DRC","DRI","DPR","TRC","CSM","PRT","BRR"],
+    "Bảo hiểm": ["BVH","BMI","MIG","PVI","VNR","PTI","BHI","ABI","BIC"],
     "Y tế & Dược phẩm": ["DHG","IMP","DVN","TRA","DBD","DCL","JVC"]
 }
 TICKER_TO_SECTOR = {t: sector for sector, tickers in DEFAULT_SECTORS.items() for t in tickers}
